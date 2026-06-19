@@ -14,6 +14,20 @@ const riskRank = {
   low: 3,
 };
 
+function escapeHtml(value) {
+  return String(value).replace(
+    /[&<>"']/g,
+    (char) =>
+      ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        "\"": "&quot;",
+        "'": "&#039;",
+      })[char],
+  );
+}
+
 function log(message) {
   const now = new Date().toLocaleTimeString();
   commandLog.textContent = `[${now}] ${message}\n${commandLog.textContent}`;
@@ -27,31 +41,34 @@ function fmt(value, digits = 1) {
 }
 
 function workloadCard(workload) {
+  const riskLevel = Object.hasOwn(riskRank, workload.risk_level)
+    ? workload.risk_level
+    : "low";
   const card = document.createElement("article");
-  card.className = `panel workload risk-${workload.risk_level}`;
+  card.className = `panel workload risk-${riskLevel}`;
 
   const ports = workload.public_ports.length
-    ? workload.public_ports.map((port) => `<code>${port}</code>`).join("")
+    ? workload.public_ports.map((port) => `<code>${escapeHtml(port)}</code>`).join("")
     : "<span class=\"private\">No public ports</span>";
 
   card.innerHTML = `
     <div class="workload-top">
       <div>
-        <p class="eyebrow">${workload.project}</p>
-        <h3>${workload.name}</h3>
-        <p>${workload.role}</p>
+        <p class="eyebrow">${escapeHtml(workload.project)}</p>
+        <h3>${escapeHtml(workload.name)}</h3>
+        <p>${escapeHtml(workload.role)}</p>
       </div>
-      <span class="badge">${workload.risk_level}</span>
+      <span class="badge">${escapeHtml(riskLevel)}</span>
     </div>
     <div class="ports">${ports}</div>
-    <p class="issue">${workload.issue}</p>
+    <p class="issue">${escapeHtml(workload.issue)}</p>
     <dl class="stats">
       <div><dt>Energy</dt><dd>${fmt(workload.energy_kwh_hour)} kWh/h</dd></div>
       <div><dt>Carbon</dt><dd>${fmt(workload.carbon_kg_hour)} kg/h</dd></div>
       <div><dt>Cost</dt><dd>$${fmt(workload.monthly_cost_usd, 0)}/mo</dd></div>
-      <div><dt>Status</dt><dd>${workload.status}</dd></div>
+      <div><dt>Status</dt><dd>${escapeHtml(workload.status)}</dd></div>
     </dl>
-    <p class="recommendation">${workload.recommendation}</p>
+    <p class="recommendation">${escapeHtml(workload.recommendation)}</p>
   `;
 
   const button = document.createElement("button");
