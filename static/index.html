@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Track 2 Hilti Cloud Sentinel</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero panel">
+        <div>
+          <p class="eyebrow">Track 2 : Hilti Cloud</p>
+          <h1>Secure & Energy-Aware Cloud Sentinel</h1>
+          <p class="lede">
+            A hackathon prototype that watches fake construction cloud workloads,
+            flags cyber exposure and carbon-heavy idle jobs, then triggers an
+            automated fix through Python into Docker.
+          </p>
+        </div>
+        <div class="cloud-icon" aria-hidden="true"></div>
+      </section>
+
+      <section class="grid metrics" aria-label="cloud totals">
+        <article class="panel metric">
+          <span>Energy load</span>
+          <strong id="energyMetric">--</strong>
+          <small>kWh per hour</small>
+        </article>
+        <article class="panel metric">
+          <span>Carbon impact</span>
+          <strong id="carbonMetric">--</strong>
+          <small>kg CO2e per hour</small>
+        </article>
+        <article class="panel metric">
+          <span>Projected cost</span>
+          <strong id="costMetric">--</strong>
+          <small>USD per month</small>
+        </article>
+      </section>
+
+      <section class="panel flow">
+        <h2>Demo flow</h2>
+        <ol>
+          <li><b>Docker</b> runs fake cloud servers like BIM-Render-04.</li>
+          <li><b>Python</b> scans containers, exposed ports, and energy labels.</li>
+          <li><b>Dashboard</b> shows the warning and recommendation.</li>
+          <li><b>Auto-Fix</b> sends a command back through Python to remove the risky workload.</li>
+        </ol>
+      </section>
+
+      <section class="panel toolbar">
+        <div>
+          <h2>Live workloads</h2>
+          <p id="sourceLabel">Connecting to monitor...</p>
+        </div>
+        <div class="actions">
+          <button id="refreshButton" type="button">Refresh scan</button>
+          <button id="resetButton" type="button">Reset simulation</button>
+        </div>
+      </section>
+
+      <section id="workloads" class="workloads" aria-live="polite"></section>
+
+      <section class="panel terminal">
+        <h2>Command channel</h2>
+        <pre id="commandLog">Waiting for scan...</pre>
+      </section>
+    </main>
+
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>
