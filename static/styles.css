@@ -574,6 +574,10 @@ dd {
   line-height: 1.45;
 }
 
+.findings.route {
+  background: #f8fafc;
+}
+
 .fix-button {
   width: 100%;
   border-color: transparent;

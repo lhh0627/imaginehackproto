@@ -29,6 +29,9 @@ Real scanning:
 - It loads `cloud_firewall_rules.json`, which represents AWS Security Group /
   Azure NSG / GCP Firewall style rules, and flags rules like
   `allow tcp/8081 from 0.0.0.0/0`.
+- It correlates cloud endpoint data, firewall rules, and Docker published ports
+  to build an exposure route, for example:
+  `internet -> security group -> public endpoint -> Docker host port 8081`.
 - It inspects container settings like health checks, privileged mode, mounted
   Docker socket, and image tags.
 - Auto-Fix really removes containers that are explicitly marked safe with
@@ -42,7 +45,8 @@ Demo/business metadata:
   provide through billing, asset inventory, and carbon reporting APIs.
 - `cloud_firewall_rules.json` is the local demo equivalent of querying cloud
   networking APIs for security groups, firewall rules, or network security
-  groups.
+  groups. It includes endpoint DNS names, public IPs, security-group resources,
+  source CIDRs, and target ports.
 
 ## Architecture
 
@@ -131,8 +135,9 @@ Open http://localhost:5000 and use the same dashboard flow.
    scans the Docker environment through the Docker socket. Docker is our
    realistic mini cloud for the hackathon."
 3. "It discovers that `BIM-Render-04` has a cloud firewall rule open to the
-   internet: `allow tcp/8081 from 0.0.0.0/0`. Locally, Docker maps that same
-   service as `localhost:8081` to container port `80`."
+   internet: `allow tcp/8081 from 0.0.0.0/0`. It then matches that to a public
+   endpoint and the Docker host port, giving a full route from internet to
+   workload."
 4. "The dashboard shows environment health, scan count, risk totals, workload
    owner, CPU, memory, carbon, cost, daily operations KPIs, and the policy
    decision."

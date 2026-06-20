@@ -121,6 +121,16 @@ function workloadCard(workload) {
         .map((exposure) => `<code>${escapeHtml(exposure)}</code>`)
         .join("")
     : "<span class=\"private\">No cloud ingress rules</span>";
+  const publicEndpoints = workload.public_endpoints?.length
+    ? workload.public_endpoints
+        .map((endpoint) => `<code>${escapeHtml(endpoint)}</code>`)
+        .join("")
+    : "<span class=\"private\">No cloud endpoint</span>";
+  const exposurePaths = workload.exposure_paths?.length
+    ? workload.exposure_paths
+        .map((path) => `<li>${escapeHtml(path)}</li>`)
+        .join("")
+    : "<li>No internet route matched for this workload.</li>";
   const findings = workload.findings?.length
     ? workload.findings
         .map((finding) => `<li>${escapeHtml(finding)}</li>`)
@@ -154,10 +164,19 @@ function workloadCard(workload) {
       <div><dt>CPU</dt><dd>${fmt(workload.cpu_pct, 0)}%</dd></div>
       <div><dt>Memory</dt><dd>${fmt(workload.memory_mb, 0)} MB</dd></div>
       <div><dt>Image</dt><dd>${escapeHtml(workload.image)}</dd></div>
+      <div><dt>Internet</dt><dd>${workload.internet_reachable ? "Reachable" : "Private"}</dd></div>
     </dl>
+    <div class="exposure-block">
+      <span>Cloud endpoint</span>
+      <div class="ports">${publicEndpoints}</div>
+    </div>
     <div class="findings">
       <strong>Detected findings</strong>
       <ul>${findings}</ul>
+    </div>
+    <div class="findings route">
+      <strong>Exposure route</strong>
+      <ul>${exposurePaths}</ul>
     </div>
     <p class="recommendation">${escapeHtml(workload.recommendation)}</p>
   `;

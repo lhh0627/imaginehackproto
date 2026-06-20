@@ -80,6 +80,9 @@ class Workload:
     image: str
     public_ports: list[str]
     cloud_exposures: list[str]
+    public_endpoints: list[str]
+    exposure_paths: list[str]
+    internet_reachable: bool
     risk_level: str
     issue: str
     energy_kwh_hour: float
@@ -149,8 +152,29 @@ def _cloud_rules_for_service(service_name: str) -> list[dict[str, Any]]:
     ]
 
 
+def _cloud_endpoints_for_service(service_name: str) -> list[dict[str, Any]]:
+    inventory = _load_cloud_rules()
+    return [
+        endpoint
+        for endpoint in inventory.get("endpoints", [])
+        if str(endpoint.get("service", "")).lower() == service_name.lower()
+    ]
+
+
 def _is_public_source(source: Any) -> bool:
     return str(source).lower() in {"0.0.0.0/0", "::/0", "internet", "any"}
+
+
+def _host_ports(public_ports: list[str]) -> set[int]:
+    ports = set()
+    for port in public_ports:
+        try:
+            host_side = port.split("->", 1)[0]
+            host_port = host_side.rsplit(":", 1)[1]
+            ports.add(int(host_port))
+        except (IndexError, ValueError):
+            continue
+    return ports
 
 
 def _cloud_exposures(service_name: str) -> list[dict[str, Any]]:
@@ -166,9 +190,59 @@ def _cloud_exposures(service_name: str) -> list[dict[str, Any]]:
             {
                 "summary": f"{resource}: allow {protocol}/{port} from {source}",
                 "sources": [source],
+                "port": port,
+                "protocol": protocol,
+                "target": rule.get("target", "unknown-target"),
             }
         )
     return exposures
+
+
+def _public_endpoints(service_name: str) -> list[str]:
+    endpoints = []
+    for endpoint in _cloud_endpoints_for_service(service_name):
+        scheme = endpoint.get("scheme", "internal")
+        dns = endpoint.get("dns", "unknown-endpoint")
+        public_ip = endpoint.get("public_ip")
+        ports = ",".join(str(port) for port in endpoint.get("ports", [])) or "unknown"
+        if public_ip:
+            endpoints.append(f"{scheme} {dns} ({public_ip}) ports {ports}")
+        else:
+            endpoints.append(f"{scheme} {dns} ports {ports}")
+    return endpoints
+
+
+def _internet_paths(
+    service_name: str,
+    public_ports: list[str],
+    cloud_exposures: list[dict[str, Any]],
+) -> list[str]:
+    host_ports = _host_ports(public_ports)
+    endpoint_lookup = {
+        str(endpoint.get("dns", "")): endpoint for endpoint in _cloud_endpoints_for_service(service_name)
+    }
+    paths = []
+
+    for exposure in cloud_exposures:
+        if not any(_is_public_source(source) for source in exposure.get("sources", [])):
+            continue
+
+        target = str(exposure.get("target", "unknown-target"))
+        endpoint = endpoint_lookup.get(target, {})
+        port = exposure.get("port")
+        endpoint_label = endpoint.get("dns", target)
+        public_ip = endpoint.get("public_ip")
+        destination = f"{endpoint_label} ({public_ip})" if public_ip else endpoint_label
+        docker_status = (
+            f"matched Docker host port {port}"
+            if isinstance(port, int) and port in host_ports
+            else "no matching Docker host port in local simulation"
+        )
+        paths.append(
+            f"internet -> {exposure['summary']} -> {destination} -> {docker_status}"
+        )
+
+    return paths
 
 
 def _public_ports(container: Any) -> list[str]:
@@ -188,6 +262,7 @@ def _container_findings(
     container: Any,
     public_ports: list[str],
     cloud_exposures: list[dict[str, Any]],
+    exposure_paths: list[str],
     energy_kwh_hour: float,
 ) -> tuple[str, list[str]]:
     attrs = container.attrs or {}
@@ -210,6 +285,10 @@ def _container_findings(
         findings.append(
             f"Cloud firewall rule allows internet ingress: {exposure_text}"
         )
+        risk_level = _max_risk(risk_level, "high")
+
+    if exposure_paths:
+        findings.append(f"Internet reachable path confirmed: {' | '.join(exposure_paths)}")
         risk_level = _max_risk(risk_level, "high")
 
     if (public_ports or public_cloud_exposures) and energy_kwh_hour >= 2:
@@ -266,11 +345,14 @@ def _workload_from_container(container: Any) -> Workload:
     name = _label(labels, "sustainability.name", container.name)
     public_ports = _public_ports(container)
     cloud_exposure_rules = _cloud_exposures(name)
+    endpoint_summaries = _public_endpoints(name)
+    exposure_paths = _internet_paths(name, public_ports, cloud_exposure_rules)
     energy_kwh_hour = _float_label(labels, "sustainability.energy_kwh_hour", 0.4)
     detected_risk, findings = _container_findings(
         container,
         public_ports,
         cloud_exposure_rules,
+        exposure_paths,
         energy_kwh_hour,
     )
     can_autofix = labels.get(AUTOFIX_LABEL, "false").lower() == "true"
@@ -286,6 +368,9 @@ def _workload_from_container(container: Any) -> Workload:
         image=", ".join(container.image.tags) or container.image.short_id,
         public_ports=public_ports,
         cloud_exposures=[exposure["summary"] for exposure in cloud_exposure_rules],
+        public_endpoints=endpoint_summaries,
+        exposure_paths=exposure_paths,
+        internet_reachable=bool(exposure_paths),
         risk_level=risk_level,
         issue=_issue_from_findings(risk_level, findings),
         energy_kwh_hour=energy_kwh_hour,
@@ -326,6 +411,11 @@ def _simulated_workloads() -> list[Workload]:
             cloud_exposures=[
                 "sg-hilti-site-api-prod: allow tcp/80 from 10.24.0.0/16",
             ],
+            public_endpoints=[
+                "internal site-data-api.internal.hilti-demo.local ports 80",
+            ],
+            exposure_paths=[],
+            internet_reachable=False,
             risk_level="low",
             issue="Private API with normal utilization.",
             energy_kwh_hour=0.35,
@@ -349,6 +439,11 @@ def _simulated_workloads() -> list[Workload]:
             cloud_exposures=[
                 "sg-hilti-model-cache-prod: allow tcp/443 from 10.24.0.0/16",
             ],
+            public_endpoints=[
+                "internal model-cache.internal.hilti-demo.local ports 443",
+            ],
+            exposure_paths=[],
+            internet_reachable=False,
             risk_level="medium",
             issue="Internal cache is healthy, but storage growth should be watched.",
             energy_kwh_hour=1.1,
@@ -377,6 +472,13 @@ def _simulated_workloads() -> list[Workload]:
                 cloud_exposures=[
                     "sg-hilti-bim-render-prod: allow tcp/8081 from 0.0.0.0/0",
                 ],
+                public_endpoints=[
+                    "internet-facing bim-render-04.prod.hilti-demo.local (203.0.113.42) ports 8081",
+                ],
+                exposure_paths=[
+                    "internet -> sg-hilti-bim-render-prod: allow tcp/8081 from 0.0.0.0/0 -> bim-render-04.prod.hilti-demo.local (203.0.113.42) -> matched Docker host port 8081",
+                ],
+                internet_reachable=True,
                 risk_level="critical",
                 issue="Public HTTP port exposed while the render node is burning idle energy.",
                 energy_kwh_hour=9.8,
@@ -386,6 +488,7 @@ def _simulated_workloads() -> list[Workload]:
                 memory_mb=2048.0,
                 findings=[
                     "Cloud firewall rule allows internet ingress: sg-hilti-bim-render-prod: allow tcp/8081 from 0.0.0.0/0",
+                    "Internet reachable path confirmed: internet -> sg-hilti-bim-render-prod: allow tcp/8081 from 0.0.0.0/0 -> bim-render-04.prod.hilti-demo.local (203.0.113.42) -> matched Docker host port 8081",
                     "Public host port detected: 0.0.0.0:8081->80/tcp",
                     "Publicly exposed workload is also high energy consumption.",
                 ],
