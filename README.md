@@ -14,6 +14,10 @@ kinds of problems at the same time:
   to sustainability impact. `BIM-Render-04` also runs a small render-worker loop
   and exposes `/metrics` so the scanner can use live workload telemetry when
   Docker is running.
+- Efficiency drift: the scanner compares live CPU and energy against a simple
+  expected baseline for the workload type. If an idle service uses too much
+  energy, it is flagged as `zombie suspected`; if an active service exceeds its
+  normal range, it is flagged as `over baseline`.
 
 The dashboard looks like a daily company control plane: it shows agent status,
 region, cluster, scan count, risk totals, workload owners, CPU/memory labels,
@@ -33,6 +37,9 @@ Real scanning:
   current BIM render task, model file, frame progress, model elements processed,
   triangles processed, active render jobs, jobs completed, CPU, memory, energy,
   carbon, and cost estimates.
+- It estimates expected CPU and energy for active render jobs, idle render
+  workers, APIs, caches, and general workloads, then compares actual telemetry
+  against that baseline.
 - It loads `cloud_firewall_rules.json`, which represents AWS Security Group /
   Azure NSG / GCP Firewall style rules, and flags rules like
   `allow tcp/8081 from 0.0.0.0/0`.
@@ -119,6 +126,8 @@ The daily operations panel shows how the tool would run inside a company:
 - Compliance status from current critical findings.
 - Daily report schedule for security and sustainability teams.
 - Energy/carbon currently at risk for critical workloads.
+- Baseline status for each workload, including normal, over baseline, and zombie
+  suspected.
 
 To bring the vulnerable workload back for another demo:
 
@@ -157,7 +166,10 @@ Open http://localhost:5000 and use the same dashboard flow.
 5. "The dashboard shows environment health, scan count, risk totals, workload
    owner, CPU, memory, carbon, cost, daily operations KPIs, and the policy
    decision."
-6. "When I click Send worker alert, the dashboard sends a command to Python,
+6. "It also compares actual energy and CPU against expected workload baselines.
+   If a workload is idle but still consuming too much, Cloud Sentinel marks it
+   as zombie suspected and recommends sending an alert."
+7. "When I click Send worker alert, the dashboard sends a command to Python,
    Python posts an alert to the BIM worker, and the worker screen displays the
    warning. The BIM worker can click Yes to acknowledge and close the alert.
    The daily operations panel then updates the alert count and energy/carbon

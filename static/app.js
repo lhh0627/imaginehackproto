@@ -150,9 +150,11 @@ function workloadCard(workload) {
     <p class="issue">${escapeHtml(workload.issue)}</p>
     <dl class="stats">
       <div><dt>Energy</dt><dd>${fmt(workload.energy_kwh_hour)} kWh/h</dd></div>
+      <div><dt>Expected</dt><dd>${fmt(workload.expected_energy_kwh_hour)} kWh/h</dd></div>
       <div><dt>Carbon</dt><dd>${fmt(workload.carbon_kg_hour)} kg/h</dd></div>
       <div><dt>Cost</dt><dd>$${fmt(workload.monthly_cost_usd, 0)}/mo</dd></div>
       <div><dt>CPU</dt><dd>${fmt(workload.cpu_pct, 0)}%</dd></div>
+      <div><dt>Efficiency</dt><dd>${escapeHtml(workload.efficiency_status ?? "normal")}</dd></div>
       <div><dt>Internet</dt><dd>${workload.internet_reachable ? "Reachable" : "Private"}</dd></div>
       <div><dt>Workload</dt><dd>${workload.workload_active ? "Active" : "Idle"}</dd></div>
       <div><dt>Task</dt><dd>${escapeHtml(workload.current_task ?? "No active render task")}</dd></div>
@@ -174,6 +176,9 @@ function workloadCard(workload) {
   button.type = "button";
   button.className = "fix-button";
   button.textContent = "Send alert";
+  if (workload.alert_recommended) {
+    button.title = `Recommended: ${workload.efficiency_issue || workload.issue}`;
+  }
   button.addEventListener("click", () => sendAlert(workload));
   card.append(button);
 

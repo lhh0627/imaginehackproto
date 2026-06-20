@@ -91,6 +91,12 @@ class Workload:
     carbon_kg_hour: float
     monthly_cost_usd: float
     cpu_pct: float
+    expected_cpu_pct: float
+    expected_energy_kwh_hour: float
+    energy_over_baseline_kwh_hour: float
+    efficiency_status: str
+    efficiency_issue: str
+    alert_recommended: bool
     memory_mb: float
     workload_active: bool
     jobs_completed: int
@@ -398,6 +404,73 @@ def _recommendation_from_findings(risk_level: str, can_alert: bool) -> str:
     return "Keep monitoring for exposure, inefficient utilization, and policy drift."
 
 
+def _baseline_assessment(
+    name: str,
+    role: str,
+    workload_active: bool,
+    active_render_jobs: int,
+    cpu_pct: float,
+    energy_kwh_hour: float,
+) -> dict[str, Any]:
+    descriptor = f"{name} {role}".lower()
+    is_render = "render" in descriptor
+    is_cache = "cache" in descriptor
+    is_api = "api" in descriptor
+
+    if is_render and (workload_active or active_render_jobs > 0):
+        expected_cpu = 82.0
+        expected_energy = 8.8
+        baseline_name = "active BIM render baseline"
+    elif is_render:
+        expected_cpu = 18.0
+        expected_energy = 1.8
+        baseline_name = "idle BIM render baseline"
+    elif is_cache:
+        expected_cpu = 12.0
+        expected_energy = 0.65
+        baseline_name = "idle cache baseline"
+    elif is_api:
+        expected_cpu = 18.0
+        expected_energy = 0.55
+        baseline_name = "private API baseline"
+    else:
+        expected_cpu = 20.0
+        expected_energy = 0.75
+        baseline_name = "general workload baseline"
+
+    energy_over = max(0.0, energy_kwh_hour - expected_energy)
+    cpu_ratio = cpu_pct / max(expected_cpu, 1.0)
+    energy_ratio = energy_kwh_hour / max(expected_energy, 0.1)
+
+    if not workload_active and (energy_ratio >= 1.5 or cpu_ratio >= 1.5):
+        status = "zombie suspected"
+        issue = (
+            f"Idle workload exceeds {baseline_name}: expected {expected_energy:.2f} kWh/h "
+            f"and {expected_cpu:.0f}% CPU, observed {energy_kwh_hour:.2f} kWh/h and {cpu_pct:.0f}% CPU."
+        )
+    elif energy_ratio >= 1.2 or cpu_ratio >= 1.25:
+        status = "over baseline"
+        issue = (
+            f"Workload is above {baseline_name}: expected {expected_energy:.2f} kWh/h "
+            f"and {expected_cpu:.0f}% CPU, observed {energy_kwh_hour:.2f} kWh/h and {cpu_pct:.0f}% CPU."
+        )
+    else:
+        status = "normal"
+        issue = (
+            f"Within {baseline_name}: expected about {expected_energy:.2f} kWh/h "
+            f"and {expected_cpu:.0f}% CPU."
+        )
+
+    return {
+        "expected_cpu_pct": expected_cpu,
+        "expected_energy_kwh_hour": expected_energy,
+        "energy_over_baseline_kwh_hour": round(energy_over, 2),
+        "efficiency_status": status,
+        "efficiency_issue": issue,
+        "alert_recommended": status in {"over baseline", "zombie suspected"},
+    }
+
+
 def _workload_from_container(container: Any) -> Workload:
     labels = container.labels or {}
     name = _label(labels, "sustainability.name", container.name)
@@ -411,6 +484,18 @@ def _workload_from_container(container: Any) -> Workload:
         "energy_kwh_hour",
         _float_label(labels, "sustainability.energy_kwh_hour", 0.4),
     )
+    role = _label(labels, "sustainability.role", "Cloud workload")
+    cpu_pct = _float_metric(metrics, "cpu_pct", _float_label(labels, "sustainability.cpu_pct", 12.0))
+    workload_active = bool(metrics.get("workload_active", False))
+    active_render_jobs = _int_metric(metrics, "active_render_jobs")
+    baseline = _baseline_assessment(
+        name=name,
+        role=role,
+        workload_active=workload_active,
+        active_render_jobs=active_render_jobs,
+        cpu_pct=cpu_pct,
+        energy_kwh_hour=energy_kwh_hour,
+    )
     detected_risk, findings = _container_findings(
         container,
         public_ports,
@@ -418,6 +503,9 @@ def _workload_from_container(container: Any) -> Workload:
         exposure_paths,
         energy_kwh_hour,
     )
+    if baseline["efficiency_status"] != "normal":
+        findings.append(f"Efficiency baseline warning: {baseline['efficiency_issue']}")
+        detected_risk = _max_risk(detected_risk, "medium")
     can_alert = bool(labels.get(ALERT_URL_LABEL))
     risk_level = detected_risk
     active_alert = metrics.get("active_alert") if isinstance(metrics.get("active_alert"), dict) else {}
@@ -425,7 +513,7 @@ def _workload_from_container(container: Any) -> Workload:
     return Workload(
         id=container.id,
         name=name,
-        role=_label(labels, "sustainability.role", "Cloud workload"),
+        role=role,
         project=_label(labels, "sustainability.project", "Construction Tech"),
         owner=_label(labels, "sustainability.owner", "platform-ops"),
         status=container.status,
@@ -448,15 +536,21 @@ def _workload_from_container(container: Any) -> Workload:
             "monthly_cost_usd",
             _float_label(labels, "sustainability.monthly_cost_usd", 28.0),
         ),
-        cpu_pct=_float_metric(metrics, "cpu_pct", _float_label(labels, "sustainability.cpu_pct", 12.0)),
+        cpu_pct=cpu_pct,
+        expected_cpu_pct=baseline["expected_cpu_pct"],
+        expected_energy_kwh_hour=baseline["expected_energy_kwh_hour"],
+        energy_over_baseline_kwh_hour=baseline["energy_over_baseline_kwh_hour"],
+        efficiency_status=baseline["efficiency_status"],
+        efficiency_issue=baseline["efficiency_issue"],
+        alert_recommended=bool(baseline["alert_recommended"] or risk_level in {"critical", "high"}),
         memory_mb=_float_metric(
             metrics,
             "memory_mb",
             _float_label(labels, "sustainability.memory_mb", 256.0),
         ),
-        workload_active=bool(metrics.get("workload_active", False)),
+        workload_active=workload_active,
         jobs_completed=_int_metric(metrics, "jobs_completed"),
-        active_render_jobs=_int_metric(metrics, "active_render_jobs"),
+        active_render_jobs=active_render_jobs,
         telemetry_source=str(metrics.get("telemetry_source", "cloud-labels")),
         current_task=str(metrics.get("current_task", "No active render task")),
         current_model=str(metrics.get("current_model", "unknown")),
@@ -522,6 +616,12 @@ def _simulated_workloads() -> list[Workload]:
             carbon_kg_hour=0.14,
             monthly_cost_usd=22.0,
             cpu_pct=8.0,
+            expected_cpu_pct=18.0,
+            expected_energy_kwh_hour=0.55,
+            energy_over_baseline_kwh_hour=0.0,
+            efficiency_status="normal",
+            efficiency_issue="Within private API baseline: expected about 0.55 kWh/h and 18% CPU.",
+            alert_recommended=False,
             memory_mb=192.0,
             workload_active=False,
             jobs_completed=0,
@@ -565,6 +665,12 @@ def _simulated_workloads() -> list[Workload]:
             carbon_kg_hour=0.43,
             monthly_cost_usd=84.0,
             cpu_pct=22.0,
+            expected_cpu_pct=12.0,
+            expected_energy_kwh_hour=0.65,
+            energy_over_baseline_kwh_hour=0.45,
+            efficiency_status="zombie suspected",
+            efficiency_issue="Idle workload exceeds idle cache baseline: expected 0.65 kWh/h and 12% CPU, observed 1.10 kWh/h and 22% CPU.",
+            alert_recommended=True,
             memory_mb=768.0,
             workload_active=False,
             jobs_completed=0,
@@ -615,6 +721,12 @@ def _simulated_workloads() -> list[Workload]:
                 carbon_kg_hour=4.1,
                 monthly_cost_usd=706.0,
                 cpu_pct=91.0,
+                expected_cpu_pct=82.0,
+                expected_energy_kwh_hour=8.8,
+                energy_over_baseline_kwh_hour=1.0,
+                efficiency_status="normal",
+                efficiency_issue="Within active BIM render baseline: expected about 8.80 kWh/h and 82% CPU.",
+                alert_recommended=True,
                 memory_mb=2048.0,
                 workload_active=True,
                 jobs_completed=42,
@@ -695,6 +807,9 @@ def _operations(workloads: list[Workload]) -> dict[str, Any]:
     active_findings = sum(
         1 for workload in workloads if workload.risk_level in {"critical", "high", "medium"}
     )
+    inefficient_workloads = [
+        workload for workload in workloads if workload.efficiency_status != "normal"
+    ]
     compliance_status = "attention required" if risk_counts.get("critical", 0) else "compliant"
     energy_at_risk = sum(
         workload.energy_kwh_hour for workload in workloads if workload.risk_level == "critical"
@@ -709,6 +824,7 @@ def _operations(workloads: list[Workload]) -> dict[str, Any]:
         "scans_24h": daily_scan_capacity + _scan_count,
         "alerts_24h": _alerts_count,
         "active_findings": active_findings,
+        "inefficient_workloads": len(inefficient_workloads),
         "compliance_status": compliance_status,
         "coverage": "all visible Docker containers + cloud firewall rules",
         "daily_report_utc": DAILY_REPORT_UTC,
@@ -722,6 +838,8 @@ def _critical_summary(workload: Workload) -> str:
         f"Scan {_scan_count}: critical {workload.name} detected in {ENVIRONMENT_NAME}. "
         f"Task='{workload.current_task}', CPU={workload.cpu_pct:.0f}%, "
         f"energy={workload.energy_kwh_hour:.2f} kWh/h, "
+        f"expected_energy={workload.expected_energy_kwh_hour:.2f} kWh/h, "
+        f"efficiency='{workload.efficiency_status}', "
         f"carbon={workload.carbon_kg_hour:.2f} kgCO2e/h, "
         f"internet_reachable={workload.internet_reachable}."
     )
@@ -802,6 +920,8 @@ def alert_workload(workload_id: str):
             f"Critical Cloud Sentinel alert: {workload.name} is internet reachable while "
             f"running '{workload.current_task}'. CPU={workload.cpu_pct:.0f}%, "
             f"energy={workload.energy_kwh_hour:.2f} kWh/h, "
+            f"expected={workload.expected_energy_kwh_hour:.2f} kWh/h, "
+            f"efficiency={workload.efficiency_status}, "
             f"carbon={workload.carbon_kg_hour:.2f} kgCO2e/h. "
             "Pause the render or move it behind private networking."
         )
@@ -834,7 +954,8 @@ def alert_workload(workload_id: str):
             _simulated_alert_message = (
                 "Critical Cloud Sentinel alert: BIM-Render-04 is internet reachable while "
                 "running 'Hilti Tower L23 coordination render'. CPU=91%, energy=9.80 kWh/h, "
-                "carbon=4.10 kgCO2e/h. Pause the render or move it behind private networking."
+                "expected=8.80 kWh/h, efficiency=normal, carbon=4.10 kgCO2e/h. "
+                "Pause the render or move it behind private networking."
             )
             _simulated_alerts_received += 1
             _alerts_count += 1
