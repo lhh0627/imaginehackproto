@@ -126,16 +126,9 @@ function workloadCard(workload) {
         .map((endpoint) => `<code>${escapeHtml(endpoint)}</code>`)
         .join("")
     : "<span class=\"private\">No cloud endpoint</span>";
-  const exposurePaths = workload.exposure_paths?.length
-    ? workload.exposure_paths
-        .map((path) => `<li>${escapeHtml(path)}</li>`)
-        .join("")
-    : "<li>No internet route matched for this workload.</li>";
   const findings = workload.findings?.length
-    ? workload.findings
-        .map((finding) => `<li>${escapeHtml(finding)}</li>`)
-        .join("")
-    : "<li>No findings reported by scanner.</li>";
+    ? workload.findings.slice(0, 2).map((finding) => `<li>${escapeHtml(finding)}</li>`).join("")
+    : "<li>No scanner findings.</li>";
 
   card.innerHTML = `
     <div class="workload-top">
@@ -159,35 +152,20 @@ function workloadCard(workload) {
       <div><dt>Energy</dt><dd>${fmt(workload.energy_kwh_hour)} kWh/h</dd></div>
       <div><dt>Carbon</dt><dd>${fmt(workload.carbon_kg_hour)} kg/h</dd></div>
       <div><dt>Cost</dt><dd>$${fmt(workload.monthly_cost_usd, 0)}/mo</dd></div>
-      <div><dt>Status</dt><dd>${escapeHtml(workload.status)}</dd></div>
-      <div><dt>Owner</dt><dd>${escapeHtml(workload.owner)}</dd></div>
       <div><dt>CPU</dt><dd>${fmt(workload.cpu_pct, 0)}%</dd></div>
-      <div><dt>Memory</dt><dd>${fmt(workload.memory_mb, 0)} MB</dd></div>
-      <div><dt>Image</dt><dd>${escapeHtml(workload.image)}</dd></div>
       <div><dt>Internet</dt><dd>${workload.internet_reachable ? "Reachable" : "Private"}</dd></div>
       <div><dt>Workload</dt><dd>${workload.workload_active ? "Active" : "Idle"}</dd></div>
-      <div><dt>Jobs</dt><dd>${fmt(workload.jobs_completed ?? 0, 0)}</dd></div>
-      <div><dt>Telemetry</dt><dd>${escapeHtml(workload.telemetry_source ?? "cloud-labels")}</dd></div>
       <div><dt>Task</dt><dd>${escapeHtml(workload.current_task ?? "No active render task")}</dd></div>
-      <div><dt>Model</dt><dd>${escapeHtml(workload.current_model ?? "unknown")}</dd></div>
       <div><dt>Progress</dt><dd>${fmt(workload.frame_progress_pct ?? 0)}%</dd></div>
-      <div><dt>Elements</dt><dd>${fmt(workload.model_elements_processed ?? 0, 0)}</dd></div>
-      <div><dt>Triangles</dt><dd>${fmt(workload.triangles_processed ?? 0, 0)}</dd></div>
-      <div><dt>Queue</dt><dd>${fmt(workload.render_queue_depth ?? 0, 0)}</dd></div>
       <div><dt>Alert</dt><dd>${workload.alert_active ? "Active" : "Closed"}</dd></div>
-      <div><dt>Acked</dt><dd>${fmt(workload.alerts_acknowledged ?? 0, 0)}</dd></div>
     </dl>
     <div class="exposure-block">
       <span>Cloud endpoint</span>
       <div class="ports">${publicEndpoints}</div>
     </div>
-    <div class="findings">
-      <strong>Detected findings</strong>
+    <div class="findings compact-findings">
+      <strong>Key findings</strong>
       <ul>${findings}</ul>
-    </div>
-    <div class="findings route">
-      <strong>Exposure route</strong>
-      <ul>${exposurePaths}</ul>
     </div>
     <p class="recommendation">${escapeHtml(workload.recommendation)}</p>
   `;
