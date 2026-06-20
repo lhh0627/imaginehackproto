@@ -17,6 +17,7 @@
           </div>
         </div>
         <nav aria-label="dashboard sections">
+          <a href="#operations">Operations</a>
           <a href="#workloads">Workloads</a>
           <a href="#incidents">Incidents</a>
           <a href="#commands">Commands</a>
@@ -68,6 +69,55 @@
             <dd id="scanIdMetric">--</dd>
           </div>
         </dl>
+      </section>
+
+      <section id="operations" class="panel operations-panel">
+        <div class="section-heading">
+          <p class="eyebrow">Daily operations</p>
+          <h2>Company deployment posture</h2>
+        </div>
+        <div class="ops-grid">
+          <article>
+            <span>Operating mode</span>
+            <strong id="modeMetric">--</strong>
+            <small id="coverageMetric">--</small>
+          </article>
+          <article>
+            <span>24h scans</span>
+            <strong id="scans24Metric">--</strong>
+            <small>continuous inventory checks</small>
+          </article>
+          <article>
+            <span>Compliance</span>
+            <strong id="complianceMetric">--</strong>
+            <small id="activeFindingsMetric">--</small>
+          </article>
+          <article>
+            <span>24h remediations</span>
+            <strong id="remediationsMetric">--</strong>
+            <small>safe auto-fix actions</small>
+          </article>
+          <article>
+            <span>Next scan</span>
+            <strong id="nextScanMetric">--</strong>
+            <small>scheduled automatically</small>
+          </article>
+          <article>
+            <span>Daily report</span>
+            <strong id="reportMetric">--</strong>
+            <small>security + sustainability teams</small>
+          </article>
+          <article>
+            <span>Energy saved/day</span>
+            <strong id="savedEnergyMetric">--</strong>
+            <small>after remediation</small>
+          </article>
+          <article>
+            <span>Carbon saved/day</span>
+            <strong id="savedCarbonMetric">--</strong>
+            <small>kg CO2e after remediation</small>
+          </article>
+        </div>
       </section>
 
       <section class="grid metrics" aria-label="cloud totals">

@@ -4,7 +4,7 @@ import os
 import time
 from collections import deque
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from flask import Flask, jsonify, send_from_directory
@@ -27,11 +27,28 @@ ENVIRONMENT_NAME = os.getenv("SENTINEL_ENVIRONMENT", "hilti-jobsite-prod-demo")
 REGION = os.getenv("SENTINEL_REGION", "eu-central-1")
 CLUSTER_NAME = os.getenv("SENTINEL_CLUSTER", "docker-edge-node-01")
 SCAN_INTERVAL_SECONDS = int(os.getenv("SENTINEL_SCAN_INTERVAL_SECONDS", "8"))
+OPERATING_SINCE = os.getenv("SENTINEL_OPERATING_SINCE", "2026-06-20T00:00:00Z")
+DAILY_REPORT_UTC = os.getenv("SENTINEL_DAILY_REPORT_UTC", "17:00")
 
 _simulated_fixed = False
 _scan_count = 0
+_remediations_count = 0
+_saved_energy_kwh_hour = 0.0
+_saved_carbon_kg_hour = 0.0
 _events = deque(
     [
+        {
+            "type": "daily-report",
+            "severity": "success",
+            "message": "Daily cloud posture report delivered to platform, security, and sustainability teams.",
+            "at": "2026-06-20T00:30:00Z",
+        },
+        {
+            "type": "scheduled-scan",
+            "severity": "info",
+            "message": "Continuous scan schedule active: inventory refresh every 8 seconds.",
+            "at": "2026-06-20T00:05:00Z",
+        },
         {
             "type": "deployment",
             "severity": "info",
@@ -333,6 +350,7 @@ def _risk_counts(workloads: list[Workload]) -> dict[str, int]:
 
 
 def _deployment(source: str) -> dict[str, Any]:
+    now = datetime.now(timezone.utc)
     return {
         "environment": ENVIRONMENT_NAME,
         "region": REGION,
@@ -341,7 +359,33 @@ def _deployment(source: str) -> dict[str, Any]:
         "source": source,
         "scan_interval_seconds": SCAN_INTERVAL_SECONDS,
         "uptime_seconds": round(time.time() - APP_STARTED_AT),
-        "last_scan_at": _now_iso(),
+        "last_scan_at": now.isoformat(timespec="seconds").replace("+00:00", "Z"),
+        "next_scan_at": (now + timedelta(seconds=SCAN_INTERVAL_SECONDS))
+        .isoformat(timespec="seconds")
+        .replace("+00:00", "Z"),
+        "operating_since": OPERATING_SINCE,
+    }
+
+
+def _operations(workloads: list[Workload]) -> dict[str, Any]:
+    risk_counts = _risk_counts(workloads)
+    daily_scan_capacity = max(1, 24 * 60 * 60 // SCAN_INTERVAL_SECONDS)
+    active_findings = sum(
+        1 for workload in workloads if workload.risk_level in {"critical", "high", "medium"}
+    )
+    compliance_status = "attention required" if risk_counts.get("critical", 0) else "compliant"
+
+    return {
+        "operating_mode": "continuous guardrail",
+        "policy_mode": "monitor, alert, and safe auto-remediate",
+        "scans_24h": daily_scan_capacity + _scan_count,
+        "remediations_24h": _remediations_count,
+        "active_findings": active_findings,
+        "compliance_status": compliance_status,
+        "coverage": "all visible Docker containers",
+        "daily_report_utc": DAILY_REPORT_UTC,
+        "estimated_daily_energy_saved_kwh": round(_saved_energy_kwh_hour * 24, 2),
+        "estimated_daily_carbon_saved_kg": round(_saved_carbon_kg_hour * 24, 2),
     }
 
 
@@ -375,6 +419,7 @@ def workloads():
                 "risk_counts": _risk_counts(current),
                 "workload_count": len(current),
             },
+            "operations": _operations(current),
             "workloads": [asdict(workload) for workload in current],
             "totals": _totals(current),
             "events": list(_events)[:8],
@@ -384,7 +429,7 @@ def workloads():
 
 @app.post("/api/workloads/<workload_id>/autofix")
 def autofix(workload_id: str):
-    global _simulated_fixed
+    global _remediations_count, _saved_carbon_kg_hour, _saved_energy_kwh_hour, _simulated_fixed
 
     try:
         client = _docker_client()
@@ -413,7 +458,11 @@ def autofix(workload_id: str):
                 403,
             )
 
+        fixed_workload = _workload_from_container(target)
         target.remove(force=True)
+        _remediations_count += 1
+        _saved_energy_kwh_hour += fixed_workload.energy_kwh_hour
+        _saved_carbon_kg_hour += fixed_workload.carbon_kg_hour
         _add_event(
             "remediation",
             "success",
@@ -428,6 +477,9 @@ def autofix(workload_id: str):
     except DockerException:
         if workload_id in {"sim-bim-render-04", "BIM-Render-04"}:
             _simulated_fixed = True
+            _remediations_count += 1
+            _saved_energy_kwh_hour += 9.8
+            _saved_carbon_kg_hour += 4.1
             _add_event(
                 "remediation",
                 "success",
@@ -453,8 +505,11 @@ def autofix(workload_id: str):
 
 @app.post("/api/reset-simulation")
 def reset_simulation():
-    global _simulated_fixed
+    global _remediations_count, _saved_carbon_kg_hour, _saved_energy_kwh_hour, _simulated_fixed
     _simulated_fixed = False
+    _remediations_count = 0
+    _saved_energy_kwh_hour = 0.0
+    _saved_carbon_kg_hour = 0.0
     _add_event("simulation", "info", "Simulation reset: BIM-Render-04 restored for another demo.")
     return jsonify({"ok": True, "message": "Simulation reset."})
 
@@ -466,6 +521,7 @@ def health():
         {
             "ok": True,
             "deployment": _deployment(source),
+            "operations": _operations(current),
             "workload_count": len(current),
             "risk_counts": _risk_counts(current),
         }

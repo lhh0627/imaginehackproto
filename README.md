@@ -12,11 +12,12 @@ kinds of problems at the same time:
   carbon, cost, owner, and project so the dashboard can connect security risk
   to sustainability impact.
 
-The dashboard looks like a running control plane: it shows agent status, region,
-cluster, scan count, risk totals, workload owners, CPU/memory labels, and an
-incident timeline. The user can click **Auto-Fix**, which sends a command back
-to Python. Python then removes the risky Docker workload from the monitored
-environment.
+The dashboard looks like a daily company control plane: it shows agent status,
+region, cluster, scan count, risk totals, workload owners, CPU/memory labels,
+24-hour scan volume, compliance status, daily report time, remediation count,
+estimated energy/carbon savings, and an incident timeline. The user can click
+**Auto-Fix**, which sends a command back to Python. Python then removes the
+risky Docker workload from the monitored environment.
 
 ## What is real vs demo metadata?
 
@@ -87,6 +88,14 @@ Click **Auto-Fix workload** on `BIM-Render-04`. The dashboard calls
 The dashboard updates every eight seconds and records the remediation in the
 incident timeline.
 
+The daily operations panel shows how the tool would run inside a company:
+
+- Continuous guardrail mode.
+- 24-hour scan count based on the configured scan interval.
+- Compliance status from current critical findings.
+- Daily report schedule for security and sustainability teams.
+- Energy/carbon savings after safe remediation.
+
 To bring the vulnerable workload back for another demo:
 
 ```bash
@@ -116,10 +125,12 @@ Open http://localhost:5000 and use the same dashboard flow.
 3. "It discovers that `BIM-Render-04` has a real host port exposed:
    `localhost:8081` maps to container port `80`."
 4. "The dashboard shows environment health, scan count, risk totals, workload
-   owner, CPU, memory, carbon, cost, and the policy decision."
+   owner, CPU, memory, carbon, cost, daily operations KPIs, and the policy
+   decision."
 5. "When I click Auto-Fix, the dashboard sends a command to Python, Python
    removes the real Docker container, and the incident timeline records the
-   remediation."
+   remediation. The daily operations panel then updates the remediation count
+   and estimated energy/carbon savings."
 
 ## API
 

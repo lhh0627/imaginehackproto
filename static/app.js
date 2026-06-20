@@ -15,6 +15,16 @@ const criticalMetric = document.querySelector("#criticalMetric");
 const protectedMetric = document.querySelector("#protectedMetric");
 const intervalMetric = document.querySelector("#intervalMetric");
 const eventFeed = document.querySelector("#eventFeed");
+const modeMetric = document.querySelector("#modeMetric");
+const coverageMetric = document.querySelector("#coverageMetric");
+const scans24Metric = document.querySelector("#scans24Metric");
+const complianceMetric = document.querySelector("#complianceMetric");
+const activeFindingsMetric = document.querySelector("#activeFindingsMetric");
+const remediationsMetric = document.querySelector("#remediationsMetric");
+const nextScanMetric = document.querySelector("#nextScanMetric");
+const reportMetric = document.querySelector("#reportMetric");
+const savedEnergyMetric = document.querySelector("#savedEnergyMetric");
+const savedCarbonMetric = document.querySelector("#savedCarbonMetric");
 
 const riskRank = {
   critical: 0,
@@ -55,10 +65,19 @@ function relativeTime(isoValue) {
     return "--";
   }
 
-  const seconds = Math.max(0, Math.round((Date.now() - timestamp) / 1000));
-  if (seconds < 5) {
+  const seconds = Math.round((Date.now() - timestamp) / 1000);
+  const absoluteSeconds = Math.abs(seconds);
+  if (absoluteSeconds < 5) {
     return "just now";
   }
+
+  if (seconds < 0) {
+    if (absoluteSeconds < 60) {
+      return `in ${absoluteSeconds}s`;
+    }
+    return `in ${Math.round(absoluteSeconds / 60)}m`;
+  }
+
   if (seconds < 60) {
     return `${seconds}s ago`;
   }
@@ -168,6 +187,16 @@ async function scan() {
     criticalMetric.textContent = data.scan.risk_counts.critical ?? 0;
     protectedMetric.textContent = workloads.filter((item) => !item.can_autofix).length;
     intervalMetric.textContent = data.deployment.scan_interval_seconds;
+    modeMetric.textContent = data.operations.operating_mode;
+    coverageMetric.textContent = data.operations.coverage;
+    scans24Metric.textContent = fmt(data.operations.scans_24h, 0);
+    complianceMetric.textContent = data.operations.compliance_status;
+    activeFindingsMetric.textContent = `${data.operations.active_findings} active finding(s)`;
+    remediationsMetric.textContent = fmt(data.operations.remediations_24h, 0);
+    nextScanMetric.textContent = relativeTime(data.deployment.next_scan_at);
+    reportMetric.textContent = `${data.operations.daily_report_utc} UTC`;
+    savedEnergyMetric.textContent = `${fmt(data.operations.estimated_daily_energy_saved_kwh)} kWh`;
+    savedCarbonMetric.textContent = `${fmt(data.operations.estimated_daily_carbon_saved_kg)} kg`;
     sourceLabel.textContent =
       data.source === "docker"
         ? `Connected to ${data.deployment.cluster} through Docker socket`

@@ -310,6 +310,46 @@ dt {
   margin-bottom: 18px;
 }
 
+.operations-panel {
+  margin-top: 18px;
+  padding: 24px;
+}
+
+.ops-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.ops-grid article {
+  border: 1px solid #edf2f7;
+  border-radius: 18px;
+  padding: 16px;
+  background:
+    linear-gradient(180deg, rgba(15, 118, 110, 0.04), transparent),
+    var(--surface-soft);
+}
+
+.ops-grid span,
+.ops-grid small {
+  display: block;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ops-grid strong {
+  display: block;
+  min-height: 2.2em;
+  margin: 9px 0 5px;
+  color: #0f172a;
+  font-size: clamp(1.25rem, 2.4vw, 1.75rem);
+  letter-spacing: -0.04em;
+  text-transform: capitalize;
+}
+
 .flow,
 .toolbar,
 .timeline,
@@ -610,6 +650,7 @@ pre {
   .deployment,
   .grid,
   .deployment dl,
+  .ops-grid,
   .flow ol {
     grid-template-columns: 1fr;
   }
