@@ -135,7 +135,7 @@ function workloadCard(workload) {
 
 async function scan() {
   refreshButton.disabled = true;
-  sourceLabel.textContent = "Scanning fake cloud...";
+  sourceLabel.textContent = "Scanning cloud environment...";
 
   try {
     const response = await fetch("/api/workloads");
@@ -162,7 +162,7 @@ async function scan() {
     sourceLabel.textContent =
       data.source === "docker"
         ? `Connected to ${data.deployment.cluster} through Docker socket`
-        : "Docker unavailable here: running deployed-style simulation";
+        : "Running deployed-style simulation because Docker is unavailable here";
 
     workloadsEl.replaceChildren(...workloads.map(workloadCard));
     renderEvents(data.events ?? []);
@@ -179,7 +179,7 @@ async function scan() {
 }
 
 async function autoFix(workload) {
-  log(`Sending fix command for ${workload.name} to server.py...`);
+  log(`Submitting remediation command for ${workload.name} to the Python agent...`);
 
   const response = await fetch(
     `/api/workloads/${encodeURIComponent(workload.id)}/autofix`,

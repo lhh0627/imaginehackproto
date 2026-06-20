@@ -8,17 +8,40 @@
   </head>
   <body>
     <main class="shell">
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-mark">CS</span>
+          <div>
+            <strong>Cloud Sentinel</strong>
+            <small>Security & Sustainability Operations</small>
+          </div>
+        </div>
+        <nav aria-label="dashboard sections">
+          <a href="#workloads">Workloads</a>
+          <a href="#incidents">Incidents</a>
+          <a href="#commands">Commands</a>
+        </nav>
+      </header>
+
       <section class="hero panel">
         <div>
-          <p class="eyebrow">Track 2 : Hilti Cloud</p>
+          <p class="eyebrow">Track 2 / Hilti cloud platform</p>
           <h1>Secure & Energy-Aware Cloud Sentinel</h1>
           <p class="lede">
             A deployed-style construction cloud guardrail that watches Docker
             workloads in real time, flags cyber exposure and carbon-heavy idle
             jobs, then triggers automated remediation through Python.
           </p>
+          <div class="hero-actions">
+            <a class="primary-link" href="#workloads">View live workloads</a>
+            <span>Continuous scan every 8 seconds</span>
+          </div>
         </div>
-        <div class="cloud-icon" aria-hidden="true"></div>
+        <aside class="hero-card" aria-label="current policy">
+          <span class="status-pill">Policy active</span>
+          <h2>Public exposure + high energy waste</h2>
+          <p>Critical workloads can be remediated directly from the dashboard.</p>
+        </aside>
       </section>
 
       <section class="panel deployment">
@@ -84,7 +107,10 @@
       </section>
 
       <section class="panel flow">
-        <h2>Live deployment flow</h2>
+        <div class="section-heading">
+          <p class="eyebrow">Operating model</p>
+          <h2>Live deployment flow</h2>
+        </div>
         <ol>
           <li><b>Docker</b> runs real containers that represent cloud services.</li>
           <li><b>Python agent</b> scans ports, labels, energy, carbon, and policy.</li>
@@ -95,6 +121,7 @@
 
       <section class="panel toolbar">
         <div>
+          <p class="eyebrow">Inventory</p>
           <h2>Live workloads</h2>
           <p id="sourceLabel">Connecting to monitor...</p>
         </div>
@@ -106,13 +133,19 @@
 
       <section id="workloads" class="workloads" aria-live="polite"></section>
 
-      <section class="panel timeline">
-        <h2>Incident timeline</h2>
+      <section id="incidents" class="panel timeline">
+        <div class="section-heading">
+          <p class="eyebrow">Audit trail</p>
+          <h2>Incident timeline</h2>
+        </div>
         <div id="eventFeed" class="event-feed">Waiting for first scan...</div>
       </section>
 
-      <section class="panel terminal">
-        <h2>Command channel</h2>
+      <section id="commands" class="panel terminal">
+        <div class="section-heading">
+          <p class="eyebrow">Automation</p>
+          <h2>Command channel</h2>
+        </div>
         <pre id="commandLog">Waiting for scan...</pre>
       </section>
     </main>
