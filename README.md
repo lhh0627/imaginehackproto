@@ -46,6 +46,9 @@ Real scanning:
 - It correlates cloud endpoint data, firewall rules, and Docker published ports
   to build an exposure route, for example:
   `internet -> security group -> public endpoint -> Docker host port 8081`.
+- It explains the root cause of the open port, including the cloud rule that
+  opened it, who created the rule, the change ticket, why it was opened, whether
+  public exposure is approved, likely consequences, and recommended fixes.
 - It inspects container settings like health checks, privileged mode, mounted
   Docker socket, and image tags.
 - Alerts are really posted to the BIM worker's internal `/alert` endpoint when
@@ -163,13 +166,16 @@ Open http://localhost:5000 and use the same dashboard flow.
    internet: `allow tcp/8081 from 0.0.0.0/0`. It then matches that to a public
    endpoint and the Docker host port, giving a full route from internet to
    workload."
-5. "The dashboard shows environment health, scan count, risk totals, workload
+5. "The exposure diagnosis explains what caused the port to open, what triggered
+   it, whether it should be closed, the consequences, and the recommended
+   solution."
+6. "The dashboard shows environment health, scan count, risk totals, workload
    owner, CPU, memory, carbon, cost, daily operations KPIs, and the policy
    decision."
-6. "It also compares actual energy and CPU against expected workload baselines.
+7. "It also compares actual energy and CPU against expected workload baselines.
    If a workload is idle but still consuming too much, Cloud Sentinel marks it
    as zombie suspected and recommends sending an alert."
-7. "When I click Send worker alert, the dashboard sends a command to Python,
+8. "When I click Send worker alert, the dashboard sends a command to Python,
    Python posts an alert to the BIM worker, and the worker screen displays the
    warning. The BIM worker can click Yes to acknowledge and close the alert.
    The daily operations panel then updates the alert count and energy/carbon

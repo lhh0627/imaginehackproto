@@ -35,6 +35,12 @@ const carbonChart = document.querySelector("#carbonChart");
 const cpuThreshold = document.querySelector("#cpuThreshold");
 const energyThreshold = document.querySelector("#energyThreshold");
 const carbonThreshold = document.querySelector("#carbonThreshold");
+const diagnosisCause = document.querySelector("#diagnosisCause");
+const diagnosisTrigger = document.querySelector("#diagnosisTrigger");
+const diagnosisPolicy = document.querySelector("#diagnosisPolicy");
+const diagnosisAccess = document.querySelector("#diagnosisAccess");
+const diagnosisConsequences = document.querySelector("#diagnosisConsequences");
+const diagnosisActions = document.querySelector("#diagnosisActions");
 
 const riskRank = {
   critical: 0,
@@ -176,6 +182,25 @@ function renderTelemetryChart(telemetry) {
   chartRecommendation.className = exceeded.length ? "chart-warning" : "chart-ok";
 }
 
+function renderList(target, items) {
+  target.replaceChildren(
+    ...(items ?? []).map((item) => {
+      const li = document.createElement("li");
+      li.textContent = item;
+      return li;
+    }),
+  );
+}
+
+function renderExposureDiagnosis(diagnosis) {
+  diagnosisCause.textContent = diagnosis.cause ?? "No root cause available.";
+  diagnosisTrigger.textContent = diagnosis.trigger ?? "No trigger metadata available.";
+  diagnosisPolicy.textContent = diagnosis.policy ?? "No policy decision available.";
+  diagnosisAccess.textContent = diagnosis.recommended_access ?? "No recommended access available.";
+  renderList(diagnosisConsequences, diagnosis.consequences);
+  renderList(diagnosisActions, diagnosis.recommended_actions);
+}
+
 function workloadCard(workload) {
   const riskLevel = Object.hasOwn(riskRank, workload.risk_level)
     ? workload.risk_level
@@ -304,6 +329,7 @@ async function scan() {
 
     workloadsEl.replaceChildren(...workloads.map(workloadCard));
     renderTelemetryChart(data.telemetry ?? {});
+    renderExposureDiagnosis(data.exposure_diagnosis ?? {});
     renderEvents(data.events ?? []);
     log(
       `Scan #${data.scan.id} complete: ${workloads.length} workload(s), ` +

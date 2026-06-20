@@ -352,6 +352,7 @@ dt {
 
 .flow,
 .chart-panel,
+.diagnosis-panel,
 .toolbar,
 .timeline,
 .terminal {
@@ -424,6 +425,54 @@ dt {
   stroke: #dc2626;
   stroke-dasharray: 6 6;
   stroke-width: 2;
+}
+
+.diagnosis-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.diagnosis-grid article,
+.diagnosis-lists article {
+  border: 1px solid #edf2f7;
+  border-radius: 18px;
+  padding: 16px;
+  background: var(--surface-soft);
+}
+
+.diagnosis-grid span {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.diagnosis-grid p,
+.diagnosis-lists li {
+  color: #475569;
+  line-height: 1.5;
+}
+
+.diagnosis-lists {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.diagnosis-lists h3 {
+  margin-bottom: 10px;
+}
+
+.diagnosis-lists ul {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 18px;
 }
 
 .flow ol {
@@ -745,6 +794,8 @@ pre {
   .deployment dl,
   .ops-grid,
   .chart-grid,
+  .diagnosis-grid,
+  .diagnosis-lists,
   .flow ol {
     grid-template-columns: 1fr;
   }

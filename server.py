@@ -310,6 +310,61 @@ def _internet_paths(
     return paths
 
 
+def _exposure_diagnosis(service_name: str) -> dict[str, Any]:
+    rules = _cloud_rules_for_service(service_name)
+    endpoints = _cloud_endpoints_for_service(service_name)
+    public_rules = [rule for rule in rules if _is_public_source(rule.get("source"))]
+
+    if not public_rules:
+        return {
+            "has_public_exposure": False,
+            "summary": "No public cloud firewall exposure detected.",
+            "cause": "Ingress rules are private or internal-only.",
+            "trigger": "No internet-facing trigger identified.",
+            "needs_closure": False,
+            "policy": "Keep private services on internal networks.",
+            "consequences": [],
+            "recommended_actions": ["Continue monitoring for policy drift."],
+            "change_ticket": "",
+            "created_by": "",
+            "expires_at": "",
+        }
+
+    rule = public_rules[0]
+    endpoint = next(
+        (item for item in endpoints if item.get("dns") == rule.get("target")),
+        {},
+    )
+    needs_closure = not bool(rule.get("approved_public_exposure", False))
+    target = endpoint.get("dns", rule.get("target", "unknown endpoint"))
+    source = rule.get("source", "unknown")
+    port = rule.get("port", "unknown")
+
+    return {
+        "has_public_exposure": True,
+        "summary": f"{rule.get('resource')} allows TCP {port} from {source} to {target}.",
+        "cause": (
+            f"Cloud firewall rule {rule.get('id')} on {rule.get('resource')} "
+            f"allows {rule.get('protocol', 'tcp')}/{port} from {source}."
+        ),
+        "trigger": rule.get("trigger", rule.get("description", "No trigger metadata recorded.")),
+        "needs_closure": needs_closure,
+        "policy": (
+            "Public exposure is not approved for this workload."
+            if needs_closure
+            else "Public exposure is approved by policy metadata."
+        ),
+        "business_reason": rule.get("business_reason", ""),
+        "recommended_access": rule.get("recommended_access", "private network access"),
+        "consequences": rule.get("consequences", []),
+        "recommended_actions": rule.get("recommended_actions", []),
+        "change_ticket": rule.get("change_ticket", ""),
+        "created_by": rule.get("created_by", ""),
+        "created_at": rule.get("created_at", ""),
+        "expires_at": rule.get("expires_at", ""),
+    }
+
+
 def _public_ports(container: Any) -> list[str]:
     ports = []
     for container_port, bindings in (container.ports or {}).items():
@@ -907,6 +962,7 @@ def workloads():
     current, source = _current_workloads()
     _scan_count += 1
     _record_telemetry(current)
+    exposure_diagnosis = _exposure_diagnosis("BIM-Render-04")
 
     critical_workloads = [workload for workload in current if workload.risk_level == "critical"]
     if critical_workloads:
@@ -928,6 +984,7 @@ def workloads():
             },
             "operations": _operations(current),
             "telemetry": _telemetry_status(),
+            "exposure_diagnosis": exposure_diagnosis,
             "workloads": [asdict(workload) for workload in current],
             "totals": _totals(current),
             "events": list(_events)[:8],
