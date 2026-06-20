@@ -10,6 +10,7 @@ services:
       SENTINEL_SCAN_INTERVAL_SECONDS: "8"
       SENTINEL_OPERATING_SINCE: "2026-06-20T00:00:00Z"
       SENTINEL_DAILY_REPORT_UTC: "17:00"
+      SENTINEL_CLOUD_RULES: cloud_firewall_rules.json
     ports:
       - "5000:5000"
     volumes:

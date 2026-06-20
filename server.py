@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import json
 import os
 import time
 from collections import deque
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any
 
 from flask import Flask, jsonify, send_from_directory
@@ -29,6 +31,7 @@ CLUSTER_NAME = os.getenv("SENTINEL_CLUSTER", "docker-edge-node-01")
 SCAN_INTERVAL_SECONDS = int(os.getenv("SENTINEL_SCAN_INTERVAL_SECONDS", "8"))
 OPERATING_SINCE = os.getenv("SENTINEL_OPERATING_SINCE", "2026-06-20T00:00:00Z")
 DAILY_REPORT_UTC = os.getenv("SENTINEL_DAILY_REPORT_UTC", "17:00")
+CLOUD_RULES_PATH = Path(os.getenv("SENTINEL_CLOUD_RULES", "cloud_firewall_rules.json"))
 
 _simulated_fixed = False
 _scan_count = 0
@@ -76,6 +79,7 @@ class Workload:
     status: str
     image: str
     public_ports: list[str]
+    cloud_exposures: list[str]
     risk_level: str
     issue: str
     energy_kwh_hour: float
@@ -129,6 +133,44 @@ def _max_risk(*risk_levels: str) -> str:
     return max(risk_levels, key=_rank_value)
 
 
+def _load_cloud_rules() -> dict[str, Any]:
+    try:
+        return json.loads(CLOUD_RULES_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {"provider": "none", "rules": []}
+
+
+def _cloud_rules_for_service(service_name: str) -> list[dict[str, Any]]:
+    inventory = _load_cloud_rules()
+    return [
+        rule
+        for rule in inventory.get("rules", [])
+        if str(rule.get("service", "")).lower() == service_name.lower()
+    ]
+
+
+def _is_public_source(source: Any) -> bool:
+    return str(source).lower() in {"0.0.0.0/0", "::/0", "internet", "any"}
+
+
+def _cloud_exposures(service_name: str) -> list[dict[str, Any]]:
+    exposures = []
+    for rule in _cloud_rules_for_service(service_name):
+        if rule.get("direction") != "ingress":
+            continue
+        protocol = rule.get("protocol", "tcp")
+        port = rule.get("port", "any")
+        source = rule.get("source", "unknown")
+        resource = rule.get("resource", "cloud-firewall")
+        exposures.append(
+            {
+                "summary": f"{resource}: allow {protocol}/{port} from {source}",
+                "sources": [source],
+            }
+        )
+    return exposures
+
+
 def _public_ports(container: Any) -> list[str]:
     ports = []
     for container_port, bindings in (container.ports or {}).items():
@@ -145,6 +187,7 @@ def _public_ports(container: Any) -> list[str]:
 def _container_findings(
     container: Any,
     public_ports: list[str],
+    cloud_exposures: list[dict[str, Any]],
     energy_kwh_hour: float,
 ) -> tuple[str, list[str]]:
     attrs = container.attrs or {}
@@ -157,7 +200,19 @@ def _container_findings(
         findings.append(f"Public host port detected: {', '.join(public_ports)}")
         risk_level = _max_risk(risk_level, "high")
 
-    if public_ports and energy_kwh_hour >= 2:
+    public_cloud_exposures = [
+        exposure
+        for exposure in cloud_exposures
+        if any(_is_public_source(source) for source in exposure.get("sources", []))
+    ]
+    if public_cloud_exposures:
+        exposure_text = ", ".join(exposure["summary"] for exposure in public_cloud_exposures)
+        findings.append(
+            f"Cloud firewall rule allows internet ingress: {exposure_text}"
+        )
+        risk_level = _max_risk(risk_level, "high")
+
+    if (public_ports or public_cloud_exposures) and energy_kwh_hour >= 2:
         findings.append("Publicly exposed workload is also high energy consumption.")
         risk_level = _max_risk(risk_level, "critical")
 
@@ -208,21 +263,29 @@ def _recommendation_from_findings(risk_level: str, can_autofix: bool) -> str:
 
 def _workload_from_container(container: Any) -> Workload:
     labels = container.labels or {}
+    name = _label(labels, "sustainability.name", container.name)
     public_ports = _public_ports(container)
+    cloud_exposure_rules = _cloud_exposures(name)
     energy_kwh_hour = _float_label(labels, "sustainability.energy_kwh_hour", 0.4)
-    detected_risk, findings = _container_findings(container, public_ports, energy_kwh_hour)
+    detected_risk, findings = _container_findings(
+        container,
+        public_ports,
+        cloud_exposure_rules,
+        energy_kwh_hour,
+    )
     can_autofix = labels.get(AUTOFIX_LABEL, "false").lower() == "true"
     risk_level = detected_risk
 
     return Workload(
         id=container.id,
-        name=_label(labels, "sustainability.name", container.name),
+        name=name,
         role=_label(labels, "sustainability.role", "Cloud workload"),
         project=_label(labels, "sustainability.project", "Construction Tech"),
         owner=_label(labels, "sustainability.owner", "platform-ops"),
         status=container.status,
         image=", ".join(container.image.tags) or container.image.short_id,
         public_ports=public_ports,
+        cloud_exposures=[exposure["summary"] for exposure in cloud_exposure_rules],
         risk_level=risk_level,
         issue=_issue_from_findings(risk_level, findings),
         energy_kwh_hour=energy_kwh_hour,
@@ -260,6 +323,9 @@ def _simulated_workloads() -> list[Workload]:
             status="running",
             image="python:3.12-slim",
             public_ports=[],
+            cloud_exposures=[
+                "sg-hilti-site-api-prod: allow tcp/80 from 10.24.0.0/16",
+            ],
             risk_level="low",
             issue="Private API with normal utilization.",
             energy_kwh_hour=0.35,
@@ -280,6 +346,9 @@ def _simulated_workloads() -> list[Workload]:
             status="running",
             image="alpine:3.20",
             public_ports=[],
+            cloud_exposures=[
+                "sg-hilti-model-cache-prod: allow tcp/443 from 10.24.0.0/16",
+            ],
             risk_level="medium",
             issue="Internal cache is healthy, but storage growth should be watched.",
             energy_kwh_hour=1.1,
@@ -305,6 +374,9 @@ def _simulated_workloads() -> list[Workload]:
                 status="running",
                 image="nginx:alpine",
                 public_ports=["0.0.0.0:8081->80/tcp"],
+                cloud_exposures=[
+                    "sg-hilti-bim-render-prod: allow tcp/8081 from 0.0.0.0/0",
+                ],
                 risk_level="critical",
                 issue="Public HTTP port exposed while the render node is burning idle energy.",
                 energy_kwh_hour=9.8,
@@ -313,6 +385,7 @@ def _simulated_workloads() -> list[Workload]:
                 cpu_pct=91.0,
                 memory_mb=2048.0,
                 findings=[
+                    "Cloud firewall rule allows internet ingress: sg-hilti-bim-render-prod: allow tcp/8081 from 0.0.0.0/0",
                     "Public host port detected: 0.0.0.0:8081->80/tcp",
                     "Publicly exposed workload is also high energy consumption.",
                 ],
@@ -382,7 +455,7 @@ def _operations(workloads: list[Workload]) -> dict[str, Any]:
         "remediations_24h": _remediations_count,
         "active_findings": active_findings,
         "compliance_status": compliance_status,
-        "coverage": "all visible Docker containers",
+        "coverage": "all visible Docker containers + cloud firewall rules",
         "daily_report_utc": DAILY_REPORT_UTC,
         "estimated_daily_energy_saved_kwh": round(_saved_energy_kwh_hour * 24, 2),
         "estimated_daily_carbon_saved_kg": round(_saved_carbon_kg_hour * 24, 2),

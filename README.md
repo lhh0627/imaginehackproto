@@ -7,7 +7,8 @@ kinds of problems at the same time:
 
 - Security exposure: the Python agent really inspects Docker containers and
   discovers public host ports, Docker socket mounts, privileged mode, missing
-  health checks, and mutable `latest` image tags.
+  health checks, mutable `latest` image tags, and cloud-style firewall rules
+  that allow internet ingress.
 - Sustainability waste: workloads carry cloud-style metadata for energy,
   carbon, cost, owner, and project so the dashboard can connect security risk
   to sustainability impact.
@@ -25,6 +26,9 @@ Real scanning:
 
 - The backend lists Docker containers through the Docker socket.
 - It reads the actual host ports Docker exposes, such as `8081:80`.
+- It loads `cloud_firewall_rules.json`, which represents AWS Security Group /
+  Azure NSG / GCP Firewall style rules, and flags rules like
+  `allow tcp/8081 from 0.0.0.0/0`.
 - It inspects container settings like health checks, privileged mode, mounted
   Docker socket, and image tags.
 - Auto-Fix really removes containers that are explicitly marked safe with
@@ -36,6 +40,9 @@ Demo/business metadata:
   `docker-compose.yml`.
 - Those labels simulate cloud tags that a real AWS/Azure/GCP deployment would
   provide through billing, asset inventory, and carbon reporting APIs.
+- `cloud_firewall_rules.json` is the local demo equivalent of querying cloud
+  networking APIs for security groups, firewall rules, or network security
+  groups.
 
 ## Architecture
 
@@ -44,8 +51,9 @@ Demo/business metadata:
            |
            v
 ###################################################
-#  BOX 1: DOCKER (Monitored Cloud Workloads)      #
-#  - Has BIM-Render-04 running with open port.    #
+#  BOX 1: DOCKER + CLOUD FIREWALL RULES           #
+#  - BIM-Render-04 has Docker port 8081 and       #
+#    cloud rule: allow tcp/8081 from 0.0.0.0/0.   #
 ###################################################
        |                               ^
        |                               |
@@ -80,7 +88,7 @@ docker compose up --build
 Open:
 
 - Dashboard: http://localhost:5000
-- Fake exposed BIM service: http://localhost:8081
+- Exposed BIM service: http://localhost:8081
 
 Click **Auto-Fix workload** on `BIM-Render-04`. The dashboard calls
 `server.py`, and `server.py` removes the `bim-render-04` container.
@@ -122,8 +130,9 @@ Open http://localhost:5000 and use the same dashboard flow.
 2. "Our Python agent is deployed as `cloud-sentinel-dashboard`. It continuously
    scans the Docker environment through the Docker socket. Docker is our
    realistic mini cloud for the hackathon."
-3. "It discovers that `BIM-Render-04` has a real host port exposed:
-   `localhost:8081` maps to container port `80`."
+3. "It discovers that `BIM-Render-04` has a cloud firewall rule open to the
+   internet: `allow tcp/8081 from 0.0.0.0/0`. Locally, Docker maps that same
+   service as `localhost:8081` to container port `80`."
 4. "The dashboard shows environment health, scan count, risk totals, workload
    owner, CPU, memory, carbon, cost, daily operations KPIs, and the policy
    decision."
@@ -142,6 +151,8 @@ Open http://localhost:5000 and use the same dashboard flow.
 ## Files
 
 - `server.py` - Flask backend, Docker integration, port scan, and rule engine.
+- `cloud_firewall_rules.json` - local cloud security-group/firewall rule
+  inventory used by the scanner.
 - `static/index.html` - dashboard structure.
 - `static/app.js` - scan and auto-fix client logic.
 - `static/styles.css` - professional operations dashboard styling.

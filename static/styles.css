@@ -490,11 +490,24 @@ button:disabled {
   color: var(--red);
 }
 
+.exposure-block {
+  margin: 16px 0;
+}
+
+.exposure-block > span {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .ports {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin: 16px 0;
 }
 
 code,

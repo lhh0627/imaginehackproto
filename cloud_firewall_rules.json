@@ -1,0 +1,35 @@
+{
+  "provider": "aws-security-group-style",
+  "rules": [
+    {
+      "id": "sgr-bim-render-public-8081",
+      "service": "BIM-Render-04",
+      "resource": "sg-hilti-bim-render-prod",
+      "direction": "ingress",
+      "protocol": "tcp",
+      "port": 8081,
+      "source": "0.0.0.0/0",
+      "description": "Temporary public BIM render preview endpoint"
+    },
+    {
+      "id": "sgr-site-api-private-80",
+      "service": "Site-Data-API",
+      "resource": "sg-hilti-site-api-prod",
+      "direction": "ingress",
+      "protocol": "tcp",
+      "port": 80,
+      "source": "10.24.0.0/16",
+      "description": "Private VPC traffic from jobsite telemetry network"
+    },
+    {
+      "id": "sgr-model-cache-private-443",
+      "service": "Model-Cache",
+      "resource": "sg-hilti-model-cache-prod",
+      "direction": "ingress",
+      "protocol": "tcp",
+      "port": 443,
+      "source": "10.24.0.0/16",
+      "description": "Private VPC access for BIM model cache"
+    }
+  ]
+}

@@ -115,7 +115,12 @@ function workloadCard(workload) {
 
   const ports = workload.public_ports.length
     ? workload.public_ports.map((port) => `<code>${escapeHtml(port)}</code>`).join("")
-    : "<span class=\"private\">No public ports</span>";
+    : "<span class=\"private\">No Docker published ports</span>";
+  const cloudExposures = workload.cloud_exposures?.length
+    ? workload.cloud_exposures
+        .map((exposure) => `<code>${escapeHtml(exposure)}</code>`)
+        .join("")
+    : "<span class=\"private\">No cloud ingress rules</span>";
   const findings = workload.findings?.length
     ? workload.findings
         .map((finding) => `<li>${escapeHtml(finding)}</li>`)
@@ -131,7 +136,14 @@ function workloadCard(workload) {
       </div>
       <span class="badge">${escapeHtml(riskLevel)}</span>
     </div>
-    <div class="ports">${ports}</div>
+    <div class="exposure-block">
+      <span>Docker published ports</span>
+      <div class="ports">${ports}</div>
+    </div>
+    <div class="exposure-block">
+      <span>Cloud firewall / security group rules</span>
+      <div class="ports">${cloudExposures}</div>
+    </div>
     <p class="issue">${escapeHtml(workload.issue)}</p>
     <dl class="stats">
       <div><dt>Energy</dt><dd>${fmt(workload.energy_kwh_hour)} kWh/h</dd></div>
