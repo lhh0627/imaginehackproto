@@ -54,6 +54,8 @@ state = {
     "render_queue_depth": len(RENDER_JOBS),
     "active_alert": None,
     "alerts_received": 0,
+    "alerts_acknowledged": 0,
+    "last_alert_acknowledged_at": None,
 }
 state_lock = threading.Lock()
 
@@ -109,6 +111,8 @@ def _metrics() -> dict[str, float | int | bool | str]:
         render_queue_depth = int(state["render_queue_depth"])
         active_alert = dict(state["active_alert"]) if state["active_alert"] else None
         alerts_received = int(state["alerts_received"])
+        alerts_acknowledged = int(state["alerts_acknowledged"])
+        last_alert_acknowledged_at = state["last_alert_acknowledged_at"]
 
     frame_progress = current_frame / max(1, int(job["frames_total"]))
     geometry_factor = min(1.0, float(job["triangles_total"]) / 5000000)
@@ -138,6 +142,8 @@ def _metrics() -> dict[str, float | int | bool | str]:
         "render_queue_depth": render_queue_depth,
         "active_alert": active_alert,
         "alerts_received": alerts_received,
+        "alerts_acknowledged": alerts_acknowledged,
+        "last_alert_acknowledged_at": last_alert_acknowledged_at,
         "jobs_completed": jobs_completed,
         "last_job_seconds": last_job_seconds,
         "uptime_seconds": uptime_seconds,
@@ -168,6 +174,11 @@ class Handler(BaseHTTPRequestHandler):
       <strong>Cloud Sentinel Alert</strong>
       <p>{escape(alert["message"])}</p>
       <small>Severity: {escape(alert["severity"])} | Received: {escape(alert["received_at"])}</small>
+      <form method="post" action="/ack-alert" style="margin-top: 14px;">
+        <button type="submit" style="border: 0; border-radius: 8px; background: #991b1b; color: white; cursor: pointer; font-weight: 700; padding: 10px 14px;">
+          Yes, acknowledge and close
+        </button>
+      </form>
     </section>"""
         body = f"""<!doctype html>
 <html lang="en">
@@ -185,6 +196,7 @@ class Handler(BaseHTTPRequestHandler):
       <li>Jobs completed: {metrics["jobs_completed"]}</li>
       <li>Active render jobs: {metrics["active_render_jobs"]}</li>
       <li>Alerts received: {metrics["alerts_received"]}</li>
+      <li>Alerts acknowledged: {metrics["alerts_acknowledged"]}</li>
       <li>Estimated energy: {metrics["energy_kwh_hour"]} kWh/hour</li>
       <li>Estimated carbon: {metrics["carbon_kg_hour"]} kg CO2e/hour</li>
     </ul>
@@ -207,6 +219,20 @@ class Handler(BaseHTTPRequestHandler):
         self._send_html()
 
     def do_POST(self) -> None:
+        if self.path == "/ack-alert":
+            with state_lock:
+                if state["active_alert"]:
+                    state["alerts_acknowledged"] += 1
+                    state["last_alert_acknowledged_at"] = datetime.now(timezone.utc).isoformat(
+                        timespec="seconds"
+                    ).replace("+00:00", "Z")
+                state["active_alert"] = None
+
+            self.send_response(303)
+            self.send_header("Location", "/")
+            self.end_headers()
+            return
+
         if self.path != "/alert":
             self.send_response(404)
             self.end_headers()

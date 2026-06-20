@@ -20,7 +20,8 @@ region, cluster, scan count, risk totals, workload owners, CPU/memory labels,
 24-hour scan volume, compliance status, daily report time, alert count,
 energy/carbon at risk, and an incident timeline. The user can click
 **Send worker alert**, which sends a warning through Python to the active BIM
-render worker. The worker screen then displays a visible Cloud Sentinel alert.
+render worker. The worker screen then displays a visible Cloud Sentinel alert
+with a **Yes, acknowledge and close** button.
 
 ## What is real vs demo metadata?
 
@@ -42,6 +43,8 @@ Real scanning:
   Docker socket, and image tags.
 - Alerts are really posted to the BIM worker's internal `/alert` endpoint when
   the workload exposes `sustainability.alert_url`.
+- The worker can acknowledge and close the banner through `/ack-alert`, and the
+  scanner reads the acknowledgement state back from `/metrics`.
 
 Demo/business metadata:
 
@@ -104,6 +107,7 @@ Open:
 Click **Send worker alert** on `BIM-Render-04`. The dashboard calls
 `server.py`, and `server.py` posts an alert to the worker's `/alert` endpoint.
 The BIM worker page then shows a red Cloud Sentinel alert banner.
+Click **Yes, acknowledge and close** on the worker page to clear the banner.
 
 The dashboard updates every eight seconds and records the alert in the incident
 timeline.
@@ -155,8 +159,9 @@ Open http://localhost:5000 and use the same dashboard flow.
    decision."
 6. "When I click Send worker alert, the dashboard sends a command to Python,
    Python posts an alert to the BIM worker, and the worker screen displays the
-   warning. The daily operations panel then updates the alert count and
-   energy/carbon at-risk values."
+   warning. The BIM worker can click Yes to acknowledge and close the alert.
+   The daily operations panel then updates the alert count and energy/carbon
+   at-risk values."
 
 ## API
 

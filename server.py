@@ -105,6 +105,8 @@ class Workload:
     alert_active: bool
     alert_message: str
     alerts_received: int
+    alerts_acknowledged: int
+    last_alert_acknowledged_at: str
     findings: list[str]
     recommendation: str
     can_alert: bool
@@ -465,6 +467,8 @@ def _workload_from_container(container: Any) -> Workload:
         alert_active=bool(active_alert),
         alert_message=str(active_alert.get("message", "")),
         alerts_received=_int_metric(metrics, "alerts_received"),
+        alerts_acknowledged=_int_metric(metrics, "alerts_acknowledged"),
+        last_alert_acknowledged_at=str(metrics.get("last_alert_acknowledged_at") or ""),
         findings=[
             *(
                 [
@@ -532,6 +536,8 @@ def _simulated_workloads() -> list[Workload]:
             alert_active=False,
             alert_message="",
             alerts_received=0,
+            alerts_acknowledged=0,
+            last_alert_acknowledged_at="",
             findings=["No exposed ports or risky container settings detected."],
             recommendation="Keep private networking and normal autoscaling policy.",
             can_alert=False,
@@ -573,6 +579,8 @@ def _simulated_workloads() -> list[Workload]:
             alert_active=False,
             alert_message="",
             alerts_received=0,
+            alerts_acknowledged=0,
+            last_alert_acknowledged_at="",
             findings=["Image uses the mutable 'latest' tag."],
             recommendation="Apply lifecycle cleanup to old BIM artifacts before the next scan.",
             can_alert=False,
@@ -621,6 +629,8 @@ def _simulated_workloads() -> list[Workload]:
                 alert_active=bool(_simulated_alert_message),
                 alert_message=_simulated_alert_message,
                 alerts_received=_simulated_alerts_received,
+                alerts_acknowledged=0,
+                last_alert_acknowledged_at="",
                 findings=[
                     "Live workload telemetry received from live-bim-render-worker.",
                     "Cloud firewall rule allows internet ingress: sg-hilti-bim-render-prod: allow tcp/8081 from 0.0.0.0/0",

@@ -174,6 +174,8 @@ function workloadCard(workload) {
       <div><dt>Elements</dt><dd>${fmt(workload.model_elements_processed ?? 0, 0)}</dd></div>
       <div><dt>Triangles</dt><dd>${fmt(workload.triangles_processed ?? 0, 0)}</dd></div>
       <div><dt>Queue</dt><dd>${fmt(workload.render_queue_depth ?? 0, 0)}</dd></div>
+      <div><dt>Alert</dt><dd>${workload.alert_active ? "Active" : "Closed"}</dd></div>
+      <div><dt>Acked</dt><dd>${fmt(workload.alerts_acknowledged ?? 0, 0)}</dd></div>
     </dl>
     <div class="exposure-block">
       <span>Cloud endpoint</span>
