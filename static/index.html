@@ -156,6 +156,40 @@
         </article>
       </section>
 
+      <section class="panel chart-panel">
+        <div class="section-heading">
+          <p class="eyebrow">Live telemetry</p>
+          <h2>BIM render usage vs critical thresholds</h2>
+          <p id="chartRecommendation">Waiting for telemetry...</p>
+        </div>
+        <div class="chart-grid">
+          <article>
+            <div>
+              <span>CPU usage</span>
+              <strong id="cpuLatest">--</strong>
+            </div>
+            <svg id="cpuChart" viewBox="0 0 320 120" role="img" aria-label="CPU usage chart"></svg>
+            <small id="cpuThreshold">--</small>
+          </article>
+          <article>
+            <div>
+              <span>Energy load</span>
+              <strong id="energyLatestChart">--</strong>
+            </div>
+            <svg id="energyChart" viewBox="0 0 320 120" role="img" aria-label="Energy usage chart"></svg>
+            <small id="energyThreshold">--</small>
+          </article>
+          <article>
+            <div>
+              <span>Carbon impact</span>
+              <strong id="carbonLatestChart">--</strong>
+            </div>
+            <svg id="carbonChart" viewBox="0 0 320 120" role="img" aria-label="Carbon impact chart"></svg>
+            <small id="carbonThreshold">--</small>
+          </article>
+        </div>
+      </section>
+
       <section class="panel flow">
         <div class="section-heading">
           <p class="eyebrow">Operating model</p>

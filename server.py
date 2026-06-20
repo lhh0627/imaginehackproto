@@ -40,6 +40,7 @@ _simulated_alert_message = ""
 _simulated_alerts_received = 0
 _scan_count = 0
 _alerts_count = 0
+_telemetry_history = deque(maxlen=18)
 _events = deque(
     [
         {
@@ -776,6 +777,55 @@ def _totals(workloads: list[Workload]) -> dict[str, float]:
     }
 
 
+def _record_telemetry(workloads: list[Workload]) -> None:
+    target = next((workload for workload in workloads if workload.name == "BIM-Render-04"), None)
+    if target is None:
+        return
+
+    _telemetry_history.append(
+        {
+            "scan_id": _scan_count,
+            "at": _now_iso(),
+            "cpu_pct": round(target.cpu_pct, 2),
+            "energy_kwh_hour": round(target.energy_kwh_hour, 2),
+            "carbon_kg_hour": round(target.carbon_kg_hour, 2),
+            "expected_energy_kwh_hour": round(target.expected_energy_kwh_hour, 2),
+            "critical": target.risk_level == "critical",
+            "alert_recommended": target.alert_recommended,
+            "efficiency_status": target.efficiency_status,
+        }
+    )
+
+
+def _telemetry_thresholds() -> dict[str, float]:
+    return {
+        "cpu_critical_pct": 85.0,
+        "energy_critical_kwh_hour": 8.0,
+        "carbon_critical_kg_hour": 3.0,
+    }
+
+
+def _telemetry_status() -> dict[str, Any]:
+    latest = _telemetry_history[-1] if _telemetry_history else {}
+    thresholds = _telemetry_thresholds()
+    exceeded = []
+
+    if latest.get("cpu_pct", 0) >= thresholds["cpu_critical_pct"]:
+        exceeded.append("CPU")
+    if latest.get("energy_kwh_hour", 0) >= thresholds["energy_critical_kwh_hour"]:
+        exceeded.append("Energy")
+    if latest.get("carbon_kg_hour", 0) >= thresholds["carbon_critical_kg_hour"]:
+        exceeded.append("Carbon")
+
+    return {
+        "workload": "BIM-Render-04",
+        "history": list(_telemetry_history),
+        "thresholds": thresholds,
+        "latest_exceeded": exceeded,
+        "alert_recommended": bool(exceeded or latest.get("alert_recommended")),
+    }
+
+
 def _risk_counts(workloads: list[Workload]) -> dict[str, int]:
     counts = {"critical": 0, "high": 0, "medium": 0, "low": 0}
     for workload in workloads:
@@ -856,6 +906,7 @@ def workloads():
 
     current, source = _current_workloads()
     _scan_count += 1
+    _record_telemetry(current)
 
     critical_workloads = [workload for workload in current if workload.risk_level == "critical"]
     if critical_workloads:
@@ -876,6 +927,7 @@ def workloads():
                 "workload_count": len(current),
             },
             "operations": _operations(current),
+            "telemetry": _telemetry_status(),
             "workloads": [asdict(workload) for workload in current],
             "totals": _totals(current),
             "events": list(_events)[:8],

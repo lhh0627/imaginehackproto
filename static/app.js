@@ -25,6 +25,16 @@ const nextScanMetric = document.querySelector("#nextScanMetric");
 const reportMetric = document.querySelector("#reportMetric");
 const savedEnergyMetric = document.querySelector("#savedEnergyMetric");
 const savedCarbonMetric = document.querySelector("#savedCarbonMetric");
+const chartRecommendation = document.querySelector("#chartRecommendation");
+const cpuLatest = document.querySelector("#cpuLatest");
+const energyLatestChart = document.querySelector("#energyLatestChart");
+const carbonLatestChart = document.querySelector("#carbonLatestChart");
+const cpuChart = document.querySelector("#cpuChart");
+const energyChart = document.querySelector("#energyChart");
+const carbonChart = document.querySelector("#carbonChart");
+const cpuThreshold = document.querySelector("#cpuThreshold");
+const energyThreshold = document.querySelector("#energyThreshold");
+const carbonThreshold = document.querySelector("#carbonThreshold");
 
 const riskRank = {
   critical: 0,
@@ -104,6 +114,66 @@ function renderEvents(events) {
       return row;
     }),
   );
+}
+
+function pointsFor(history, key, maxValue) {
+  if (!history.length) {
+    return "";
+  }
+
+  return history
+    .map((sample, index) => {
+      const x = history.length === 1 ? 310 : 10 + (index * 300) / (history.length - 1);
+      const y = 110 - (Math.min(Number(sample[key]) || 0, maxValue) / maxValue) * 92;
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(" ");
+}
+
+function renderLineChart(svg, history, key, threshold, maxValue, color) {
+  const thresholdY = 110 - (threshold / maxValue) * 92;
+  const points = pointsFor(history, key, maxValue);
+  svg.innerHTML = `
+    <line x1="10" y1="${thresholdY}" x2="310" y2="${thresholdY}" class="threshold-line"></line>
+    <polyline points="${points}" fill="none" stroke="${color}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"></polyline>
+  `;
+}
+
+function renderTelemetryChart(telemetry) {
+  const history = telemetry.history ?? [];
+  const thresholds = telemetry.thresholds ?? {};
+  const latest = history[history.length - 1] ?? {};
+  const exceeded = telemetry.latest_exceeded ?? [];
+
+  cpuLatest.textContent = `${fmt(latest.cpu_pct ?? 0, 0)}%`;
+  energyLatestChart.textContent = `${fmt(latest.energy_kwh_hour ?? 0)} kWh/h`;
+  carbonLatestChart.textContent = `${fmt(latest.carbon_kg_hour ?? 0)} kg/h`;
+  cpuThreshold.textContent = `Critical threshold: ${fmt(thresholds.cpu_critical_pct ?? 0, 0)}%`;
+  energyThreshold.textContent = `Critical threshold: ${fmt(thresholds.energy_critical_kwh_hour ?? 0)} kWh/h`;
+  carbonThreshold.textContent = `Critical threshold: ${fmt(thresholds.carbon_critical_kg_hour ?? 0)} kg/h`;
+
+  renderLineChart(cpuChart, history, "cpu_pct", thresholds.cpu_critical_pct ?? 85, 100, "#2563eb");
+  renderLineChart(
+    energyChart,
+    history,
+    "energy_kwh_hour",
+    thresholds.energy_critical_kwh_hour ?? 8,
+    12,
+    "#d97706",
+  );
+  renderLineChart(
+    carbonChart,
+    history,
+    "carbon_kg_hour",
+    thresholds.carbon_critical_kg_hour ?? 3,
+    5,
+    "#16a34a",
+  );
+
+  chartRecommendation.textContent = exceeded.length
+    ? `Alert recommended: ${exceeded.join(", ")} exceeded critical threshold.`
+    : "Telemetry is currently within critical thresholds.";
+  chartRecommendation.className = exceeded.length ? "chart-warning" : "chart-ok";
 }
 
 function workloadCard(workload) {
@@ -233,6 +303,7 @@ async function scan() {
     }
 
     workloadsEl.replaceChildren(...workloads.map(workloadCard));
+    renderTelemetryChart(data.telemetry ?? {});
     renderEvents(data.events ?? []);
     log(
       `Scan #${data.scan.id} complete: ${workloads.length} workload(s), ` +
