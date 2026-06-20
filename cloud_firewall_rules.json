@@ -1,0 +1,88 @@
+{
+  "provider": "aws-security-group-style",
+  "account": "hilti-construction-prod",
+  "vpc": "vpc-hilti-eu-central-jobsite",
+  "endpoints": [
+    {
+      "service": "BIM-Render-04",
+      "type": "application-load-balancer",
+      "dns": "bim-render-04.prod.hilti-demo.local",
+      "public_ip": "203.0.113.42",
+      "scheme": "internet-facing",
+      "ports": [8081]
+    },
+    {
+      "service": "Site-Data-API",
+      "type": "internal-service",
+      "dns": "site-data-api.internal.hilti-demo.local",
+      "public_ip": null,
+      "scheme": "internal",
+      "ports": [80]
+    },
+    {
+      "service": "Model-Cache",
+      "type": "internal-service",
+      "dns": "model-cache.internal.hilti-demo.local",
+      "public_ip": null,
+      "scheme": "internal",
+      "ports": [443]
+    }
+  ],
+  "rules": [
+    {
+      "id": "sgr-bim-render-public-8081",
+      "service": "BIM-Render-04",
+      "resource": "sg-hilti-bim-render-prod",
+      "resource_type": "security-group",
+      "direction": "ingress",
+      "protocol": "tcp",
+      "port": 8081,
+      "source": "0.0.0.0/0",
+      "target": "bim-render-04.prod.hilti-demo.local",
+      "description": "Temporary public BIM render preview endpoint",
+      "created_by": "bim-rendering-team",
+      "change_ticket": "TEMP-RENDER-PREVIEW-042",
+      "created_at": "2026-06-20T00:15:00Z",
+      "expires_at": "2026-06-20T02:00:00Z",
+      "business_reason": "External coordinator needed temporary preview access for a BIM render review.",
+      "approved_public_exposure": false,
+      "recommended_access": "private VPC/VPN only with authenticated preview link",
+      "trigger": "Temporary preview rule was created but left internet-facing during an active render job.",
+      "consequences": [
+        "Sensitive BIM model and building layout may be reachable from the internet.",
+        "Attackers can probe or abuse the render endpoint, increasing compute cost.",
+        "Exposed high-energy render workload increases carbon and cost impact if left running."
+      ],
+      "recommended_actions": [
+        "Remove 0.0.0.0/0 from the security group rule.",
+        "Move the render preview behind private VPC/VPN access.",
+        "Send an alert to the BIM rendering team to pause or secure the active render.",
+        "Add an expiry policy for temporary preview firewall rules."
+      ]
+    },
+    {
+      "id": "sgr-site-api-private-80",
+      "service": "Site-Data-API",
+      "resource": "sg-hilti-site-api-prod",
+      "resource_type": "security-group",
+      "direction": "ingress",
+      "protocol": "tcp",
+      "port": 80,
+      "source": "10.24.0.0/16",
+      "target": "site-data-api.internal.hilti-demo.local",
+      "description": "Private VPC traffic from jobsite telemetry network"
+    },
+    {
+      "id": "sgr-model-cache-private-443",
+      "service": "Model-Cache",
+      "resource": "sg-hilti-model-cache-prod",
+      "resource_type": "security-group",
+      "direction": "ingress",
+      "protocol": "tcp",
+      "port": 443,
+      "source": "10.24.0.0/16",
+      "target": "model-cache.internal.hilti-demo.local",
+      "description": "Private VPC access for BIM model cache"
+    }
+  ]
+}

@@ -1,0 +1,108 @@
+services:
+  sentinel:
+    build: .
+    container_name: cloud-sentinel-dashboard
+    restart: unless-stopped
+    environment:
+      SENTINEL_ENVIRONMENT: hilti-jobsite-prod-demo
+      SENTINEL_REGION: eu-central-1
+      SENTINEL_CLUSTER: docker-edge-node-01
+      SENTINEL_SCAN_INTERVAL_SECONDS: "8"
+      SENTINEL_OPERATING_SINCE: "2026-06-20T00:00:00Z"
+      SENTINEL_DAILY_REPORT_UTC: "17:00"
+      SENTINEL_CLOUD_RULES: cloud_firewall_rules.json
+    ports:
+      - "5000:5000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    labels:
+      sustainability.ignore: "true"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:5000/api/health', timeout=2)",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  bim-render-04:
+    build: ./workloads/bim-render-worker
+    container_name: bim-render-04
+    restart: unless-stopped
+    environment:
+      RENDER_INTENSITY: "0.82"
+      CARBON_KG_PER_KWH: "0.42"
+      COST_USD_PER_KWH: "0.10"
+    ports:
+      - "8081:80"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost/health', timeout=2)",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    labels:
+      sustainability.demo: "true"
+      sustainability.name: "BIM-Render-04"
+      sustainability.role: "Legacy BIM render worker"
+      sustainability.project: "Hilti Tower Renovation"
+      sustainability.owner: "bim-rendering-team"
+      sustainability.metrics_url: "http://bim-render-04/metrics"
+      sustainability.alert_url: "http://bim-render-04/alert"
+      sustainability.energy_kwh_hour: "9.8"
+      sustainability.carbon_kg_hour: "4.1"
+      sustainability.monthly_cost_usd: "706"
+      sustainability.cpu_pct: "91"
+      sustainability.memory_mb: "2048"
+
+  site-data-api:
+    image: nginx:alpine
+    container_name: site-data-api
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost/ >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    labels:
+      sustainability.demo: "true"
+      sustainability.name: "Site-Data-API"
+      sustainability.role: "Construction telemetry API"
+      sustainability.project: "Hilti Connected Jobsite"
+      sustainability.owner: "jobsite-platform"
+      sustainability.energy_kwh_hour: "0.35"
+      sustainability.carbon_kg_hour: "0.14"
+      sustainability.monthly_cost_usd: "22"
+      sustainability.cpu_pct: "8"
+      sustainability.memory_mb: "192"
+
+  model-cache:
+    image: alpine:latest
+    container_name: model-cache
+    restart: unless-stopped
+    command: ["sh", "-c", "sleep infinity"]
+    healthcheck:
+      test: ["CMD-SHELL", "true"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    labels:
+      sustainability.demo: "true"
+      sustainability.name: "Model-Cache"
+      sustainability.role: "BIM model cache for project drawings"
+      sustainability.project: "Hilti Connected Jobsite"
+      sustainability.owner: "digital-twin-team"
+      sustainability.energy_kwh_hour: "1.1"
+      sustainability.carbon_kg_hour: "0.43"
+      sustainability.monthly_cost_usd: "84"
+      sustainability.cpu_pct: "22"
+      sustainability.memory_mb: "768"
