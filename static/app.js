@@ -97,6 +97,11 @@ function workloadCard(workload) {
   const ports = workload.public_ports.length
     ? workload.public_ports.map((port) => `<code>${escapeHtml(port)}</code>`).join("")
     : "<span class=\"private\">No public ports</span>";
+  const findings = workload.findings?.length
+    ? workload.findings
+        .map((finding) => `<li>${escapeHtml(finding)}</li>`)
+        .join("")
+    : "<li>No findings reported by scanner.</li>";
 
   card.innerHTML = `
     <div class="workload-top">
@@ -119,6 +124,10 @@ function workloadCard(workload) {
       <div><dt>Memory</dt><dd>${fmt(workload.memory_mb, 0)} MB</dd></div>
       <div><dt>Image</dt><dd>${escapeHtml(workload.image)}</dd></div>
     </dl>
+    <div class="findings">
+      <strong>Detected findings</strong>
+      <ul>${findings}</ul>
+    </div>
     <p class="recommendation">${escapeHtml(workload.recommendation)}</p>
   `;
 

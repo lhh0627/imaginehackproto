@@ -497,6 +497,30 @@ dd {
   background: linear-gradient(90deg, rgba(217, 119, 6, 0.08), transparent);
 }
 
+.findings {
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  margin-bottom: 16px;
+  padding: 14px;
+  background: #fbfdff;
+}
+
+.findings strong {
+  display: block;
+  margin-bottom: 8px;
+  color: #0f172a;
+  font-size: 0.82rem;
+}
+
+.findings ul {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 18px;
+  color: #475569;
+  line-height: 1.45;
+}
+
 .fix-button {
   width: 100%;
   border-color: transparent;

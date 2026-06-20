@@ -5,14 +5,36 @@ Track 2 Hilti hackathon prototype for the theme **Sustainable Tomorrow**.
 This demo shows a deployed-style construction-tech cloud monitor that finds two
 kinds of problems at the same time:
 
-- Security exposure: a fake BIM render server is running with a public port.
-- Sustainability waste: that same workload is labeled as high energy and
-  high-carbon while idle.
+- Security exposure: the Python agent really inspects Docker containers and
+  discovers public host ports, Docker socket mounts, privileged mode, missing
+  health checks, and mutable `latest` image tags.
+- Sustainability waste: workloads carry cloud-style metadata for energy,
+  carbon, cost, owner, and project so the dashboard can connect security risk
+  to sustainability impact.
 
 The dashboard looks like a running control plane: it shows agent status, region,
 cluster, scan count, risk totals, workload owners, CPU/memory labels, and an
 incident timeline. The user can click **Auto-Fix**, which sends a command back
-to Python. Python then removes the risky Docker workload from the fake cloud.
+to Python. Python then removes the risky Docker workload from the monitored
+environment.
+
+## What is real vs demo metadata?
+
+Real scanning:
+
+- The backend lists Docker containers through the Docker socket.
+- It reads the actual host ports Docker exposes, such as `8081:80`.
+- It inspects container settings like health checks, privileged mode, mounted
+  Docker socket, and image tags.
+- Auto-Fix really removes containers that are explicitly marked safe with
+  `sustainability.autofix: "true"`.
+
+Demo/business metadata:
+
+- Energy, carbon, monthly cost, owner, role, and project are labels in
+  `docker-compose.yml`.
+- Those labels simulate cloud tags that a real AWS/Azure/GCP deployment would
+  provide through billing, asset inventory, and carbon reporting APIs.
 
 ## Architecture
 
@@ -21,7 +43,7 @@ to Python. Python then removes the risky Docker workload from the fake cloud.
            |
            v
 ###################################################
-#  BOX 1: DOCKER (Fake Cloud Servers)             #
+#  BOX 1: DOCKER (Monitored Cloud Workloads)      #
 #  - Has BIM-Render-04 running with open port.    #
 ###################################################
        |                               ^
@@ -89,10 +111,10 @@ Open http://localhost:5000 and use the same dashboard flow.
 1. "Construction teams run cloud workloads for BIM rendering, telemetry, and
    project data. These workloads can be both cyber-risky and carbon-heavy."
 2. "Our Python agent is deployed as `cloud-sentinel-dashboard`. It continuously
-   scans the Docker environment through the Docker socket. In this demo, Docker
-   is our realistic mini cloud."
-3. "It finds `BIM-Render-04`, owned by the BIM rendering team, which exposes a
-   public HTTP port and has a high idle energy/carbon label."
+   scans the Docker environment through the Docker socket. Docker is our
+   realistic mini cloud for the hackathon."
+3. "It discovers that `BIM-Render-04` has a real host port exposed:
+   `localhost:8081` maps to container port `80`."
 4. "The dashboard shows environment health, scan count, risk totals, workload
    owner, CPU, memory, carbon, cost, and the policy decision."
 5. "When I click Auto-Fix, the dashboard sends a command to Python, Python
@@ -108,9 +130,9 @@ Open http://localhost:5000 and use the same dashboard flow.
 
 ## Files
 
-- `server.py` - Flask backend and Docker integration.
+- `server.py` - Flask backend, Docker integration, port scan, and rule engine.
 - `static/index.html` - dashboard structure.
 - `static/app.js` - scan and auto-fix client logic.
-- `static/styles.css` - cyberpunk dashboard styling.
-- `docker-compose.yml` - fake cloud workloads.
+- `static/styles.css` - professional operations dashboard styling.
+- `docker-compose.yml` - monitored Docker workloads and cloud-style metadata.
 - `Dockerfile` - container for the dashboard/backend.

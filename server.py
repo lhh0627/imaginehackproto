@@ -20,8 +20,8 @@ except ImportError:  # pragma: no cover - lets the fallback demo run without Doc
 
 app = Flask(__name__, static_folder="static", static_url_path="")
 
-DEMO_LABEL = "sustainability.demo"
 AUTOFIX_LABEL = "sustainability.autofix"
+IGNORE_LABEL = "sustainability.ignore"
 APP_STARTED_AT = time.time()
 ENVIRONMENT_NAME = os.getenv("SENTINEL_ENVIRONMENT", "hilti-jobsite-prod-demo")
 REGION = os.getenv("SENTINEL_REGION", "eu-central-1")
@@ -66,6 +66,7 @@ class Workload:
     monthly_cost_usd: float
     cpu_pct: float
     memory_mb: float
+    findings: list[str]
     recommendation: str
     can_autofix: bool
 
@@ -103,6 +104,14 @@ def _float_label(labels: dict[str, str], key: str, default: float) -> float:
         return default
 
 
+def _rank_value(risk_level: str) -> int:
+    return {"low": 0, "medium": 1, "high": 2, "critical": 3}.get(risk_level, 0)
+
+
+def _max_risk(*risk_levels: str) -> str:
+    return max(risk_levels, key=_rank_value)
+
+
 def _public_ports(container: Any) -> list[str]:
     ports = []
     for container_port, bindings in (container.ports or {}).items():
@@ -116,11 +125,77 @@ def _public_ports(container: Any) -> list[str]:
     return ports
 
 
+def _container_findings(
+    container: Any,
+    public_ports: list[str],
+    energy_kwh_hour: float,
+) -> tuple[str, list[str]]:
+    attrs = container.attrs or {}
+    config = attrs.get("Config") or {}
+    host_config = attrs.get("HostConfig") or {}
+    findings = []
+    risk_level = "low"
+
+    if public_ports:
+        findings.append(f"Public host port detected: {', '.join(public_ports)}")
+        risk_level = _max_risk(risk_level, "high")
+
+    if public_ports and energy_kwh_hour >= 2:
+        findings.append("Publicly exposed workload is also high energy consumption.")
+        risk_level = _max_risk(risk_level, "critical")
+
+    if host_config.get("Privileged"):
+        findings.append("Container is running in privileged mode.")
+        risk_level = _max_risk(risk_level, "critical")
+
+    binds = host_config.get("Binds") or []
+    if any("/var/run/docker.sock" in bind for bind in binds):
+        findings.append("Docker socket is mounted; this container can control Docker.")
+        risk_level = _max_risk(risk_level, "high")
+
+    healthcheck = config.get("Healthcheck")
+    if not healthcheck:
+        findings.append("No container health check configured.")
+        risk_level = _max_risk(risk_level, "low")
+
+    image_name = ", ".join(container.image.tags) or container.image.short_id
+    if image_name.endswith(":latest"):
+        findings.append("Image uses the mutable 'latest' tag.")
+        risk_level = _max_risk(risk_level, "medium")
+
+    if not findings:
+        findings.append("No exposed ports or risky container settings detected.")
+
+    return risk_level, findings
+
+
+def _issue_from_findings(risk_level: str, findings: list[str]) -> str:
+    if risk_level == "critical":
+        return "Critical policy violation: " + findings[0]
+    if risk_level == "high":
+        return "High-risk container configuration detected: " + findings[0]
+    if risk_level == "medium":
+        return "Medium-risk operational finding detected: " + findings[0]
+    return "No critical security exposure detected."
+
+
+def _recommendation_from_findings(risk_level: str, can_autofix: bool) -> str:
+    if can_autofix and risk_level in {"critical", "high"}:
+        return "Auto-fix is available for this workload; remove it from the exposed environment."
+    if risk_level in {"critical", "high"}:
+        return "Restrict public access, remove privileged settings, and review this workload before restart."
+    if risk_level == "medium":
+        return "Review image/version policy and operational hygiene during the next maintenance window."
+    return "Keep monitoring for exposure, inefficient utilization, and policy drift."
+
+
 def _workload_from_container(container: Any) -> Workload:
     labels = container.labels or {}
     public_ports = _public_ports(container)
-    default_risk = "critical" if public_ports else "low"
-    risk_level = _label(labels, "sustainability.risk", default_risk)
+    energy_kwh_hour = _float_label(labels, "sustainability.energy_kwh_hour", 0.4)
+    detected_risk, findings = _container_findings(container, public_ports, energy_kwh_hour)
+    can_autofix = labels.get(AUTOFIX_LABEL, "false").lower() == "true"
+    risk_level = detected_risk
 
     return Workload(
         id=container.id,
@@ -132,34 +207,28 @@ def _workload_from_container(container: Any) -> Workload:
         image=", ".join(container.image.tags) or container.image.short_id,
         public_ports=public_ports,
         risk_level=risk_level,
-        issue=_label(
-            labels,
-            "sustainability.issue",
-            "No critical security or energy issue detected.",
-        ),
-        energy_kwh_hour=_float_label(labels, "sustainability.energy_kwh_hour", 0.4),
+        issue=_issue_from_findings(risk_level, findings),
+        energy_kwh_hour=energy_kwh_hour,
         carbon_kg_hour=_float_label(labels, "sustainability.carbon_kg_hour", 0.18),
         monthly_cost_usd=_float_label(labels, "sustainability.monthly_cost_usd", 28.0),
         cpu_pct=_float_label(labels, "sustainability.cpu_pct", 12.0),
         memory_mb=_float_label(labels, "sustainability.memory_mb", 256.0),
-        recommendation=_label(
-            labels,
-            "sustainability.recommendation",
-            "Keep monitoring for exposure, idle load, and carbon spikes.",
-        ),
-        can_autofix=labels.get(AUTOFIX_LABEL, "false").lower() == "true",
+        findings=findings,
+        recommendation=_recommendation_from_findings(risk_level, can_autofix),
+        can_autofix=can_autofix,
     )
 
 
 def _docker_workloads() -> list[Workload]:
     client = _docker_client()
-    containers = client.containers.list(
-        all=True,
-        filters={"label": f"{DEMO_LABEL}=true"},
-    )
+    containers = [
+        container
+        for container in client.containers.list(all=True)
+        if (container.labels or {}).get(IGNORE_LABEL, "false").lower() != "true"
+    ]
     return sorted(
         [_workload_from_container(container) for container in containers],
-        key=lambda workload: (workload.risk_level != "critical", workload.name),
+        key=lambda workload: (-_rank_value(workload.risk_level), workload.name),
     )
 
 
@@ -181,6 +250,7 @@ def _simulated_workloads() -> list[Workload]:
             monthly_cost_usd=22.0,
             cpu_pct=8.0,
             memory_mb=192.0,
+            findings=["No exposed ports or risky container settings detected."],
             recommendation="Keep private networking and normal autoscaling policy.",
             can_autofix=False,
         ),
@@ -200,6 +270,7 @@ def _simulated_workloads() -> list[Workload]:
             monthly_cost_usd=84.0,
             cpu_pct=22.0,
             memory_mb=768.0,
+            findings=["Image uses the mutable 'latest' tag."],
             recommendation="Apply lifecycle cleanup to old BIM artifacts before the next scan.",
             can_autofix=False,
         ),
@@ -224,6 +295,10 @@ def _simulated_workloads() -> list[Workload]:
                 monthly_cost_usd=706.0,
                 cpu_pct=91.0,
                 memory_mb=2048.0,
+                findings=[
+                    "Public host port detected: 0.0.0.0:8081->80/tcp",
+                    "Publicly exposed workload is also high energy consumption.",
+                ],
                 recommendation="Auto-fix by removing this exposed idle render node.",
                 can_autofix=True,
             ),
@@ -313,10 +388,7 @@ def autofix(workload_id: str):
 
     try:
         client = _docker_client()
-        candidates = client.containers.list(
-            all=True,
-            filters={"label": f"{DEMO_LABEL}=true"},
-        )
+        candidates = client.containers.list(all=True)
         target = next(
             (
                 container
@@ -350,7 +422,7 @@ def autofix(workload_id: str):
         return jsonify(
             {
                 "ok": True,
-                "message": f"Auto-fix complete: removed {target.name} from the fake cloud.",
+                "message": f"Auto-fix complete: removed {target.name} from the monitored environment.",
             }
         )
     except DockerException:
