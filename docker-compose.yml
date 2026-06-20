@@ -2,58 +2,102 @@ services:
   sentinel:
     build: .
     container_name: cloud-sentinel-dashboard
+    restart: unless-stopped
+    environment:
+      SENTINEL_ENVIRONMENT: hilti-jobsite-prod-demo
+      SENTINEL_REGION: eu-central-1
+      SENTINEL_CLUSTER: docker-edge-node-01
+      SENTINEL_SCAN_INTERVAL_SECONDS: "8"
     ports:
       - "5000:5000"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:5000/api/health', timeout=2)",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 3
 
   bim-render-04:
     image: nginx:alpine
     container_name: bim-render-04
+    restart: unless-stopped
     ports:
       - "8081:80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost/ >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
     labels:
       sustainability.demo: "true"
       sustainability.autofix: "true"
       sustainability.name: "BIM-Render-04"
       sustainability.role: "Legacy BIM render worker"
       sustainability.project: "Hilti Tower Renovation"
+      sustainability.owner: "bim-rendering-team"
       sustainability.risk: "critical"
       sustainability.issue: "Public HTTP port exposed while the render node is burning idle energy."
       sustainability.energy_kwh_hour: "9.8"
       sustainability.carbon_kg_hour: "4.1"
       sustainability.monthly_cost_usd: "706"
+      sustainability.cpu_pct: "91"
+      sustainability.memory_mb: "2048"
       sustainability.recommendation: "Remove this exposed idle render node and restart it later behind private networking."
 
   site-data-api:
     image: nginx:alpine
     container_name: site-data-api
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost/ >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
     labels:
       sustainability.demo: "true"
       sustainability.autofix: "false"
       sustainability.name: "Site-Data-API"
       sustainability.role: "Construction telemetry API"
       sustainability.project: "Hilti Connected Jobsite"
+      sustainability.owner: "jobsite-platform"
       sustainability.risk: "low"
       sustainability.issue: "Private API with normal utilization."
       sustainability.energy_kwh_hour: "0.35"
       sustainability.carbon_kg_hour: "0.14"
       sustainability.monthly_cost_usd: "22"
+      sustainability.cpu_pct: "8"
+      sustainability.memory_mb: "192"
       sustainability.recommendation: "Keep private networking and normal autoscaling policy."
 
   model-cache:
     image: alpine:3.20
     container_name: model-cache
+    restart: unless-stopped
     command: ["sh", "-c", "sleep infinity"]
+    healthcheck:
+      test: ["CMD-SHELL", "true"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
     labels:
       sustainability.demo: "true"
       sustainability.autofix: "false"
       sustainability.name: "Model-Cache"
       sustainability.role: "BIM model cache for project drawings"
       sustainability.project: "Hilti Connected Jobsite"
+      sustainability.owner: "digital-twin-team"
       sustainability.risk: "medium"
       sustainability.issue: "Internal cache is healthy, but storage growth should be watched."
       sustainability.energy_kwh_hour: "1.1"
       sustainability.carbon_kg_hour: "0.43"
       sustainability.monthly_cost_usd: "84"
+      sustainability.cpu_pct: "22"
+      sustainability.memory_mb: "768"
       sustainability.recommendation: "Apply lifecycle cleanup to old BIM artifacts before the next scan."

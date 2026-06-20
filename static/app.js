@@ -6,6 +6,15 @@ const resetButton = document.querySelector("#resetButton");
 const energyMetric = document.querySelector("#energyMetric");
 const carbonMetric = document.querySelector("#carbonMetric");
 const costMetric = document.querySelector("#costMetric");
+const environmentName = document.querySelector("#environmentName");
+const regionMetric = document.querySelector("#regionMetric");
+const clusterMetric = document.querySelector("#clusterMetric");
+const lastScanMetric = document.querySelector("#lastScanMetric");
+const scanIdMetric = document.querySelector("#scanIdMetric");
+const criticalMetric = document.querySelector("#criticalMetric");
+const protectedMetric = document.querySelector("#protectedMetric");
+const intervalMetric = document.querySelector("#intervalMetric");
+const eventFeed = document.querySelector("#eventFeed");
 
 const riskRank = {
   critical: 0,
@@ -40,6 +49,44 @@ function fmt(value, digits = 1) {
   });
 }
 
+function relativeTime(isoValue) {
+  const timestamp = new Date(isoValue).getTime();
+  if (Number.isNaN(timestamp)) {
+    return "--";
+  }
+
+  const seconds = Math.max(0, Math.round((Date.now() - timestamp) / 1000));
+  if (seconds < 5) {
+    return "just now";
+  }
+  if (seconds < 60) {
+    return `${seconds}s ago`;
+  }
+  return `${Math.round(seconds / 60)}m ago`;
+}
+
+function renderEvents(events) {
+  if (!events.length) {
+    eventFeed.textContent = "No incidents recorded yet.";
+    return;
+  }
+
+  eventFeed.replaceChildren(
+    ...events.map((event) => {
+      const row = document.createElement("article");
+      row.className = `event severity-${event.severity}`;
+      row.innerHTML = `
+        <div>
+          <strong>${escapeHtml(event.type)}</strong>
+          <p>${escapeHtml(event.message)}</p>
+        </div>
+        <time>${escapeHtml(relativeTime(event.at))}</time>
+      `;
+      return row;
+    }),
+  );
+}
+
 function workloadCard(workload) {
   const riskLevel = Object.hasOwn(riskRank, workload.risk_level)
     ? workload.risk_level
@@ -67,6 +114,10 @@ function workloadCard(workload) {
       <div><dt>Carbon</dt><dd>${fmt(workload.carbon_kg_hour)} kg/h</dd></div>
       <div><dt>Cost</dt><dd>$${fmt(workload.monthly_cost_usd, 0)}/mo</dd></div>
       <div><dt>Status</dt><dd>${escapeHtml(workload.status)}</dd></div>
+      <div><dt>Owner</dt><dd>${escapeHtml(workload.owner)}</dd></div>
+      <div><dt>CPU</dt><dd>${fmt(workload.cpu_pct, 0)}%</dd></div>
+      <div><dt>Memory</dt><dd>${fmt(workload.memory_mb, 0)} MB</dd></div>
+      <div><dt>Image</dt><dd>${escapeHtml(workload.image)}</dd></div>
     </dl>
     <p class="recommendation">${escapeHtml(workload.recommendation)}</p>
   `;
@@ -100,13 +151,25 @@ async function scan() {
     energyMetric.textContent = fmt(data.totals.energy_kwh_hour);
     carbonMetric.textContent = fmt(data.totals.carbon_kg_hour);
     costMetric.textContent = `$${fmt(data.totals.monthly_cost_usd, 0)}`;
+    environmentName.textContent = data.deployment.environment;
+    regionMetric.textContent = data.deployment.region;
+    clusterMetric.textContent = data.deployment.cluster;
+    lastScanMetric.textContent = relativeTime(data.deployment.last_scan_at);
+    scanIdMetric.textContent = `#${data.scan.id}`;
+    criticalMetric.textContent = data.scan.risk_counts.critical ?? 0;
+    protectedMetric.textContent = workloads.filter((item) => !item.can_autofix).length;
+    intervalMetric.textContent = data.deployment.scan_interval_seconds;
     sourceLabel.textContent =
       data.source === "docker"
-        ? "Connected to Docker fake cloud"
-        : "Docker unavailable: showing built-in simulation";
+        ? `Connected to ${data.deployment.cluster} through Docker socket`
+        : "Docker unavailable here: running deployed-style simulation";
 
     workloadsEl.replaceChildren(...workloads.map(workloadCard));
-    log(`Scan complete: ${workloads.length} workload(s) from ${data.source}.`);
+    renderEvents(data.events ?? []);
+    log(
+      `Scan #${data.scan.id} complete: ${workloads.length} workload(s), ` +
+        `${data.scan.risk_counts.critical ?? 0} critical.`,
+    );
   } catch (error) {
     sourceLabel.textContent = "Monitor is offline";
     log(error.message);
@@ -144,3 +207,4 @@ refreshButton.addEventListener("click", scan);
 resetButton.addEventListener("click", resetSimulation);
 
 scan();
+setInterval(scan, 8000);
