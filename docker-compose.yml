@@ -30,13 +30,23 @@ services:
       retries: 3
 
   bim-render-04:
-    image: nginx:alpine
+    build: ./workloads/bim-render-worker
     container_name: bim-render-04
     restart: unless-stopped
+    environment:
+      RENDER_INTENSITY: "0.82"
+      CARBON_KG_PER_KWH: "0.42"
+      COST_USD_PER_KWH: "0.10"
     ports:
       - "8081:80"
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost/ >/dev/null || exit 1"]
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost/health', timeout=2)",
+        ]
       interval: 10s
       timeout: 3s
       retries: 3
@@ -47,6 +57,7 @@ services:
       sustainability.role: "Legacy BIM render worker"
       sustainability.project: "Hilti Tower Renovation"
       sustainability.owner: "bim-rendering-team"
+      sustainability.metrics_url: "http://bim-render-04/metrics"
       sustainability.energy_kwh_hour: "9.8"
       sustainability.carbon_kg_hour: "4.1"
       sustainability.monthly_cost_usd: "706"

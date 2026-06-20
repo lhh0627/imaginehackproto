@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import time
+import urllib.request
 from collections import deque
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
@@ -24,6 +25,7 @@ app = Flask(__name__, static_folder="static", static_url_path="")
 
 AUTOFIX_LABEL = "sustainability.autofix"
 IGNORE_LABEL = "sustainability.ignore"
+METRICS_URL_LABEL = "sustainability.metrics_url"
 APP_STARTED_AT = time.time()
 ENVIRONMENT_NAME = os.getenv("SENTINEL_ENVIRONMENT", "hilti-jobsite-prod-demo")
 REGION = os.getenv("SENTINEL_REGION", "eu-central-1")
@@ -90,6 +92,10 @@ class Workload:
     monthly_cost_usd: float
     cpu_pct: float
     memory_mb: float
+    workload_active: bool
+    jobs_completed: int
+    active_render_jobs: int
+    telemetry_source: str
     findings: list[str]
     recommendation: str
     can_autofix: bool
@@ -124,6 +130,35 @@ def _label(labels: dict[str, str], key: str, default: str) -> str:
 def _float_label(labels: dict[str, str], key: str, default: float) -> float:
     try:
         return float(labels.get(key, default))
+    except (TypeError, ValueError):
+        return default
+
+
+def _live_metrics(labels: dict[str, str]) -> dict[str, Any]:
+    metrics_url = labels.get(METRICS_URL_LABEL)
+    if not metrics_url:
+        return {}
+
+    try:
+        with urllib.request.urlopen(metrics_url, timeout=0.6) as response:
+            if response.status != 200:
+                return {}
+            payload = json.loads(response.read().decode("utf-8"))
+            return payload if isinstance(payload, dict) else {}
+    except (OSError, TimeoutError, json.JSONDecodeError):
+        return {}
+
+
+def _float_metric(metrics: dict[str, Any], key: str, default: float) -> float:
+    try:
+        return float(metrics.get(key, default))
+    except (TypeError, ValueError):
+        return default
+
+
+def _int_metric(metrics: dict[str, Any], key: str, default: int = 0) -> int:
+    try:
+        return int(metrics.get(key, default))
     except (TypeError, ValueError):
         return default
 
@@ -343,11 +378,16 @@ def _recommendation_from_findings(risk_level: str, can_autofix: bool) -> str:
 def _workload_from_container(container: Any) -> Workload:
     labels = container.labels or {}
     name = _label(labels, "sustainability.name", container.name)
+    metrics = _live_metrics(labels)
     public_ports = _public_ports(container)
     cloud_exposure_rules = _cloud_exposures(name)
     endpoint_summaries = _public_endpoints(name)
     exposure_paths = _internet_paths(name, public_ports, cloud_exposure_rules)
-    energy_kwh_hour = _float_label(labels, "sustainability.energy_kwh_hour", 0.4)
+    energy_kwh_hour = _float_metric(
+        metrics,
+        "energy_kwh_hour",
+        _float_label(labels, "sustainability.energy_kwh_hour", 0.4),
+    )
     detected_risk, findings = _container_findings(
         container,
         public_ports,
@@ -374,11 +414,36 @@ def _workload_from_container(container: Any) -> Workload:
         risk_level=risk_level,
         issue=_issue_from_findings(risk_level, findings),
         energy_kwh_hour=energy_kwh_hour,
-        carbon_kg_hour=_float_label(labels, "sustainability.carbon_kg_hour", 0.18),
-        monthly_cost_usd=_float_label(labels, "sustainability.monthly_cost_usd", 28.0),
-        cpu_pct=_float_label(labels, "sustainability.cpu_pct", 12.0),
-        memory_mb=_float_label(labels, "sustainability.memory_mb", 256.0),
-        findings=findings,
+        carbon_kg_hour=_float_metric(
+            metrics,
+            "carbon_kg_hour",
+            _float_label(labels, "sustainability.carbon_kg_hour", 0.18),
+        ),
+        monthly_cost_usd=_float_metric(
+            metrics,
+            "monthly_cost_usd",
+            _float_label(labels, "sustainability.monthly_cost_usd", 28.0),
+        ),
+        cpu_pct=_float_metric(metrics, "cpu_pct", _float_label(labels, "sustainability.cpu_pct", 12.0)),
+        memory_mb=_float_metric(
+            metrics,
+            "memory_mb",
+            _float_label(labels, "sustainability.memory_mb", 256.0),
+        ),
+        workload_active=bool(metrics.get("workload_active", False)),
+        jobs_completed=_int_metric(metrics, "jobs_completed"),
+        active_render_jobs=_int_metric(metrics, "active_render_jobs"),
+        telemetry_source=str(metrics.get("telemetry_source", "cloud-labels")),
+        findings=[
+            *(
+                [
+                    f"Live workload telemetry received from {metrics.get('telemetry_source', 'metrics endpoint')}."
+                ]
+                if metrics
+                else []
+            ),
+            *findings,
+        ],
         recommendation=_recommendation_from_findings(risk_level, can_autofix),
         can_autofix=can_autofix,
     )
@@ -423,6 +488,10 @@ def _simulated_workloads() -> list[Workload]:
             monthly_cost_usd=22.0,
             cpu_pct=8.0,
             memory_mb=192.0,
+            workload_active=False,
+            jobs_completed=0,
+            active_render_jobs=0,
+            telemetry_source="cloud-labels",
             findings=["No exposed ports or risky container settings detected."],
             recommendation="Keep private networking and normal autoscaling policy.",
             can_autofix=False,
@@ -451,6 +520,10 @@ def _simulated_workloads() -> list[Workload]:
             monthly_cost_usd=84.0,
             cpu_pct=22.0,
             memory_mb=768.0,
+            workload_active=False,
+            jobs_completed=0,
+            active_render_jobs=0,
+            telemetry_source="cloud-labels",
             findings=["Image uses the mutable 'latest' tag."],
             recommendation="Apply lifecycle cleanup to old BIM artifacts before the next scan.",
             can_autofix=False,
@@ -486,7 +559,12 @@ def _simulated_workloads() -> list[Workload]:
                 monthly_cost_usd=706.0,
                 cpu_pct=91.0,
                 memory_mb=2048.0,
+                workload_active=True,
+                jobs_completed=42,
+                active_render_jobs=1,
+                telemetry_source="live-bim-render-worker",
                 findings=[
+                    "Live workload telemetry received from live-bim-render-worker.",
                     "Cloud firewall rule allows internet ingress: sg-hilti-bim-render-prod: allow tcp/8081 from 0.0.0.0/0",
                     "Internet reachable path confirmed: internet -> sg-hilti-bim-render-prod: allow tcp/8081 from 0.0.0.0/0 -> bim-render-04.prod.hilti-demo.local (203.0.113.42) -> matched Docker host port 8081",
                     "Public host port detected: 0.0.0.0:8081->80/tcp",

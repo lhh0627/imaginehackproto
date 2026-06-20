@@ -165,6 +165,9 @@ function workloadCard(workload) {
       <div><dt>Memory</dt><dd>${fmt(workload.memory_mb, 0)} MB</dd></div>
       <div><dt>Image</dt><dd>${escapeHtml(workload.image)}</dd></div>
       <div><dt>Internet</dt><dd>${workload.internet_reachable ? "Reachable" : "Private"}</dd></div>
+      <div><dt>Workload</dt><dd>${workload.workload_active ? "Active" : "Idle"}</dd></div>
+      <div><dt>Jobs</dt><dd>${fmt(workload.jobs_completed ?? 0, 0)}</dd></div>
+      <div><dt>Telemetry</dt><dd>${escapeHtml(workload.telemetry_source ?? "cloud-labels")}</dd></div>
     </dl>
     <div class="exposure-block">
       <span>Cloud endpoint</span>

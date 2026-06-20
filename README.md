@@ -11,7 +11,9 @@ kinds of problems at the same time:
   that allow internet ingress.
 - Sustainability waste: workloads carry cloud-style metadata for energy,
   carbon, cost, owner, and project so the dashboard can connect security risk
-  to sustainability impact.
+  to sustainability impact. `BIM-Render-04` also runs a small render-worker loop
+  and exposes `/metrics` so the scanner can use live workload telemetry when
+  Docker is running.
 
 The dashboard looks like a daily company control plane: it shows agent status,
 region, cluster, scan count, risk totals, workload owners, CPU/memory labels,
@@ -26,6 +28,9 @@ Real scanning:
 
 - The backend lists Docker containers through the Docker socket.
 - It reads the actual host ports Docker exposes, such as `8081:80`.
+- It reads live workload telemetry from `BIM-Render-04` at `/metrics`, including
+  active render jobs, jobs completed, CPU, memory, energy, carbon, and cost
+  estimates.
 - It loads `cloud_firewall_rules.json`, which represents AWS Security Group /
   Azure NSG / GCP Firewall style rules, and flags rules like
   `allow tcp/8081 from 0.0.0.0/0`.
@@ -40,9 +45,10 @@ Real scanning:
 Demo/business metadata:
 
 - Energy, carbon, monthly cost, owner, role, and project are labels in
-  `docker-compose.yml`.
-- Those labels simulate cloud tags that a real AWS/Azure/GCP deployment would
-  provide through billing, asset inventory, and carbon reporting APIs.
+  `docker-compose.yml` for services that do not expose live metrics.
+- `BIM-Render-04` calculates live demo estimates from its render activity. In a
+  real company deployment, those values would come from billing, monitoring,
+  carbon, utilization, and asset inventory APIs.
 - `cloud_firewall_rules.json` is the local demo equivalent of querying cloud
   networking APIs for security groups, firewall rules, or network security
   groups. It includes endpoint DNS names, public IPs, security-group resources,
@@ -134,14 +140,17 @@ Open http://localhost:5000 and use the same dashboard flow.
 2. "Our Python agent is deployed as `cloud-sentinel-dashboard`. It continuously
    scans the Docker environment through the Docker socket. Docker is our
    realistic mini cloud for the hackathon."
-3. "It discovers that `BIM-Render-04` has a cloud firewall rule open to the
+3. "BIM-Render-04 is actively simulating BIM render jobs and publishing live
+   telemetry. The scanner reads its `/metrics` endpoint to get current energy,
+   carbon, cost, CPU, and job count estimates."
+4. "It discovers that `BIM-Render-04` has a cloud firewall rule open to the
    internet: `allow tcp/8081 from 0.0.0.0/0`. It then matches that to a public
    endpoint and the Docker host port, giving a full route from internet to
    workload."
-4. "The dashboard shows environment health, scan count, risk totals, workload
+5. "The dashboard shows environment health, scan count, risk totals, workload
    owner, CPU, memory, carbon, cost, daily operations KPIs, and the policy
    decision."
-5. "When I click Auto-Fix, the dashboard sends a command to Python, Python
+6. "When I click Auto-Fix, the dashboard sends a command to Python, Python
    removes the real Docker container, and the incident timeline records the
    remediation. The daily operations panel then updates the remediation count
    and estimated energy/carbon savings."
@@ -163,3 +172,5 @@ Open http://localhost:5000 and use the same dashboard flow.
 - `static/styles.css` - professional operations dashboard styling.
 - `docker-compose.yml` - monitored Docker workloads and cloud-style metadata.
 - `Dockerfile` - container for the dashboard/backend.
+- `workloads/bim-render-worker/` - active BIM render workload simulator with
+  live `/metrics` telemetry.
