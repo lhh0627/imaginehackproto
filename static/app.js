@@ -195,8 +195,7 @@ function workloadCard(workload) {
   const button = document.createElement("button");
   button.type = "button";
   button.className = "fix-button";
-  button.textContent = workload.can_alert ? "Send worker alert" : "Monitoring only";
-  button.disabled = !workload.can_alert;
+  button.textContent = "Send alert";
   button.addEventListener("click", () => sendAlert(workload));
   card.append(button);
 
@@ -269,6 +268,11 @@ async function scan() {
 }
 
 async function sendAlert(workload) {
+  if (!workload.can_alert) {
+    log(`Demo alert only: ${workload.name} is monitoring-only and has no worker alert channel.`);
+    return;
+  }
+
   log(`Sending critical alert for ${workload.name} to the BIM worker screen...`);
 
   const response = await fetch(
