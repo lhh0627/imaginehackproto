@@ -166,25 +166,20 @@ class Handler(BaseHTTPRequestHandler):
 
     def _send_html(self) -> None:
         metrics = _metrics()
-        alert = metrics["active_alert"]
-        alert_html = ""
-        if alert:
-            alert_html = f"""
-    <section style="border: 2px solid #dc2626; background: #fef2f2; color: #991b1b; padding: 16px; border-radius: 12px; margin-bottom: 24px;">
-      <strong>Cloud Sentinel Alert</strong>
-      <p>{escape(alert["message"])}</p>
-      <small>Severity: {escape(alert["severity"])} | Received: {escape(alert["received_at"])}</small>
-      <form method="post" action="/ack-alert" style="margin-top: 14px;">
-        <button type="submit" style="border: 0; border-radius: 8px; background: #991b1b; color: white; cursor: pointer; font-weight: 700; padding: 10px 14px;">
-          Yes, acknowledge and close
-        </button>
-      </form>
-    </section>"""
         body = f"""<!doctype html>
 <html lang="en">
   <head><title>BIM-Render-04</title></head>
   <body style="font-family: system-ui; max-width: 760px; margin: 48px auto;">
-    {alert_html}
+    <section id="alertBanner" style="display: none; border: 2px solid #dc2626; background: #fef2f2; color: #991b1b; padding: 16px; border-radius: 12px; margin-bottom: 24px;">
+      <strong>Cloud Sentinel Alert</strong>
+      <p id="alertMessage"></p>
+      <small id="alertMeta"></small>
+      <form id="ackAlertForm" style="margin-top: 14px;">
+        <button type="submit" style="border: 0; border-radius: 8px; background: #991b1b; color: white; cursor: pointer; font-weight: 700; padding: 10px 14px;">
+          Yes, acknowledge and close
+        </button>
+      </form>
+    </section>
     <h1>BIM-Render-04</h1>
     <p>Legacy BIM render worker is currently simulating render jobs.</p>
     <ul>
@@ -201,6 +196,43 @@ class Handler(BaseHTTPRequestHandler):
       <li>Estimated carbon: {metrics["carbon_kg_hour"]} kg CO2e/hour</li>
     </ul>
     <p><a href="/metrics">View live metrics JSON</a></p>
+    <script>
+      const alertBanner = document.querySelector("#alertBanner");
+      const alertMessage = document.querySelector("#alertMessage");
+      const alertMeta = document.querySelector("#alertMeta");
+      const ackAlertForm = document.querySelector("#ackAlertForm");
+
+      function showAlert(alert) {{
+        alertBanner.style.display = "block";
+        alertMessage.textContent = alert.message;
+        alertMeta.textContent = `Severity: ${{alert.severity}} | Received: ${{alert.received_at}}`;
+      }}
+
+      function hideAlert() {{
+        alertBanner.style.display = "none";
+        alertMessage.textContent = "";
+        alertMeta.textContent = "";
+      }}
+
+      async function refreshAlert() {{
+        const response = await fetch("/metrics", {{ cache: "no-store" }});
+        const metrics = await response.json();
+        if (metrics.active_alert) {{
+          showAlert(metrics.active_alert);
+        }} else {{
+          hideAlert();
+        }}
+      }}
+
+      ackAlertForm.addEventListener("submit", async (event) => {{
+        event.preventDefault();
+        await fetch("/ack-alert", {{ method: "POST" }});
+        await refreshAlert();
+      }});
+
+      refreshAlert();
+      setInterval(refreshAlert, 2000);
+    </script>
   </body>
 </html>""".encode("utf-8")
         self.send_response(200)
