@@ -20,7 +20,7 @@ const coverageMetric = document.querySelector("#coverageMetric");
 const scans24Metric = document.querySelector("#scans24Metric");
 const complianceMetric = document.querySelector("#complianceMetric");
 const activeFindingsMetric = document.querySelector("#activeFindingsMetric");
-const remediationsMetric = document.querySelector("#remediationsMetric");
+const alertsMetric = document.querySelector("#alertsMetric");
 const nextScanMetric = document.querySelector("#nextScanMetric");
 const reportMetric = document.querySelector("#reportMetric");
 const savedEnergyMetric = document.querySelector("#savedEnergyMetric");
@@ -193,9 +193,9 @@ function workloadCard(workload) {
   const button = document.createElement("button");
   button.type = "button";
   button.className = "fix-button";
-  button.textContent = workload.can_autofix ? "Auto-Fix workload" : "Monitoring only";
-  button.disabled = !workload.can_autofix;
-  button.addEventListener("click", () => autoFix(workload));
+  button.textContent = workload.can_alert ? "Send worker alert" : "Monitoring only";
+  button.disabled = !workload.can_alert;
+  button.addEventListener("click", () => sendAlert(workload));
   card.append(button);
 
   return card;
@@ -229,18 +229,18 @@ async function scan() {
     lastScanMetric.textContent = relativeTime(data.deployment.last_scan_at);
     scanIdMetric.textContent = `#${data.scan.id}`;
     criticalMetric.textContent = data.scan.risk_counts.critical ?? 0;
-    protectedMetric.textContent = workloads.filter((item) => !item.can_autofix).length;
+    protectedMetric.textContent = workloads.filter((item) => !item.can_alert).length;
     intervalMetric.textContent = data.deployment.scan_interval_seconds;
     modeMetric.textContent = data.operations.operating_mode;
     coverageMetric.textContent = data.operations.coverage;
     scans24Metric.textContent = fmt(data.operations.scans_24h, 0);
     complianceMetric.textContent = data.operations.compliance_status;
     activeFindingsMetric.textContent = `${data.operations.active_findings} active finding(s)`;
-    remediationsMetric.textContent = fmt(data.operations.remediations_24h, 0);
+    alertsMetric.textContent = fmt(data.operations.alerts_24h, 0);
     nextScanMetric.textContent = relativeTime(data.deployment.next_scan_at);
     reportMetric.textContent = `${data.operations.daily_report_utc} UTC`;
-    savedEnergyMetric.textContent = `${fmt(data.operations.estimated_daily_energy_saved_kwh)} kWh`;
-    savedCarbonMetric.textContent = `${fmt(data.operations.estimated_daily_carbon_saved_kg)} kg`;
+    savedEnergyMetric.textContent = `${fmt(data.operations.estimated_daily_energy_at_risk_kwh)} kWh`;
+    savedCarbonMetric.textContent = `${fmt(data.operations.estimated_daily_carbon_at_risk_kg)} kg`;
     if (sourceLabel) {
       sourceLabel.textContent =
         data.source === "docker"
@@ -266,17 +266,17 @@ async function scan() {
   }
 }
 
-async function autoFix(workload) {
-  log(`Submitting remediation command for ${workload.name} to the Python agent...`);
+async function sendAlert(workload) {
+  log(`Sending critical alert for ${workload.name} to the BIM worker screen...`);
 
   const response = await fetch(
-    `/api/workloads/${encodeURIComponent(workload.id)}/autofix`,
+    `/api/workloads/${encodeURIComponent(workload.id)}/alert`,
     { method: "POST" },
   );
   const result = await response.json();
 
   if (!response.ok || !result.ok) {
-    log(result.message || `Auto-fix failed with HTTP ${response.status}.`);
+    log(result.message || `Alert failed with HTTP ${response.status}.`);
     return;
   }
 

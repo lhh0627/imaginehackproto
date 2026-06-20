@@ -17,10 +17,10 @@ kinds of problems at the same time:
 
 The dashboard looks like a daily company control plane: it shows agent status,
 region, cluster, scan count, risk totals, workload owners, CPU/memory labels,
-24-hour scan volume, compliance status, daily report time, remediation count,
-estimated energy/carbon savings, and an incident timeline. The user can click
-**Auto-Fix**, which sends a command back to Python. Python then removes the
-risky Docker workload from the monitored environment.
+24-hour scan volume, compliance status, daily report time, alert count,
+energy/carbon at risk, and an incident timeline. The user can click
+**Send worker alert**, which sends a warning through Python to the active BIM
+render worker. The worker screen then displays a visible Cloud Sentinel alert.
 
 ## What is real vs demo metadata?
 
@@ -40,8 +40,8 @@ Real scanning:
   `internet -> security group -> public endpoint -> Docker host port 8081`.
 - It inspects container settings like health checks, privileged mode, mounted
   Docker socket, and image tags.
-- Auto-Fix really removes containers that are explicitly marked safe with
-  `sustainability.autofix: "true"`.
+- Alerts are really posted to the BIM worker's internal `/alert` endpoint when
+  the workload exposes `sustainability.alert_url`.
 
 Demo/business metadata:
 
@@ -69,7 +69,7 @@ Demo/business metadata:
        |                               ^
        |                               |
   1. Python asks:                 4. Python says:
-  "What's running?"               "REMOVE BIM-RENDER!"
+  "What's running?"               "SHOW ALERT!"
        |                               |
        v                               |
 ###################################################
@@ -79,7 +79,7 @@ Demo/business metadata:
        |                               ^
        |                               |
   2. Python sends data:           3. User clicks:
-  "BIM-Render is vulnerable!"     "Auto-Fix workload"
+  "BIM-Render is vulnerable!"     "Send worker alert"
        |                               |
        v                               |
 ###################################################
@@ -101,11 +101,12 @@ Open:
 - Dashboard: http://localhost:5000
 - Exposed BIM service: http://localhost:8081
 
-Click **Auto-Fix workload** on `BIM-Render-04`. The dashboard calls
-`server.py`, and `server.py` removes the `bim-render-04` container.
+Click **Send worker alert** on `BIM-Render-04`. The dashboard calls
+`server.py`, and `server.py` posts an alert to the worker's `/alert` endpoint.
+The BIM worker page then shows a red Cloud Sentinel alert banner.
 
-The dashboard updates every eight seconds and records the remediation in the
-incident timeline.
+The dashboard updates every eight seconds and records the alert in the incident
+timeline.
 
 The daily operations panel shows how the tool would run inside a company:
 
@@ -113,7 +114,7 @@ The daily operations panel shows how the tool would run inside a company:
 - 24-hour scan count based on the configured scan interval.
 - Compliance status from current critical findings.
 - Daily report schedule for security and sustainability teams.
-- Energy/carbon savings after safe remediation.
+- Energy/carbon currently at risk for critical workloads.
 
 To bring the vulnerable workload back for another demo:
 
@@ -152,15 +153,15 @@ Open http://localhost:5000 and use the same dashboard flow.
 5. "The dashboard shows environment health, scan count, risk totals, workload
    owner, CPU, memory, carbon, cost, daily operations KPIs, and the policy
    decision."
-6. "When I click Auto-Fix, the dashboard sends a command to Python, Python
-   removes the real Docker container, and the incident timeline records the
-   remediation. The daily operations panel then updates the remediation count
-   and estimated energy/carbon savings."
+6. "When I click Send worker alert, the dashboard sends a command to Python,
+   Python posts an alert to the BIM worker, and the worker screen displays the
+   warning. The daily operations panel then updates the alert count and
+   energy/carbon at-risk values."
 
 ## API
 
 - `GET /api/workloads` - scan Docker or simulation and return live workloads.
-- `POST /api/workloads/<id>/autofix` - remove an auto-fixable demo workload.
+- `POST /api/workloads/<id>/alert` - notify an alert-capable workload.
 - `POST /api/reset-simulation` - reset the Python-only fallback state.
 - `GET /api/health` - health check with deployment and risk-count metadata.
 
@@ -170,7 +171,7 @@ Open http://localhost:5000 and use the same dashboard flow.
 - `cloud_firewall_rules.json` - local cloud security-group/firewall rule
   inventory used by the scanner.
 - `static/index.html` - dashboard structure.
-- `static/app.js` - scan and auto-fix client logic.
+- `static/app.js` - scan and alert client logic.
 - `static/styles.css` - professional operations dashboard styling.
 - `docker-compose.yml` - monitored Docker workloads and cloud-style metadata.
 - `Dockerfile` - container for the dashboard/backend.

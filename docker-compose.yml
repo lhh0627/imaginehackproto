@@ -52,12 +52,12 @@ services:
       retries: 3
     labels:
       sustainability.demo: "true"
-      sustainability.autofix: "true"
       sustainability.name: "BIM-Render-04"
       sustainability.role: "Legacy BIM render worker"
       sustainability.project: "Hilti Tower Renovation"
       sustainability.owner: "bim-rendering-team"
       sustainability.metrics_url: "http://bim-render-04/metrics"
+      sustainability.alert_url: "http://bim-render-04/alert"
       sustainability.energy_kwh_hour: "9.8"
       sustainability.carbon_kg_hour: "4.1"
       sustainability.monthly_cost_usd: "706"
@@ -75,7 +75,6 @@ services:
       retries: 3
     labels:
       sustainability.demo: "true"
-      sustainability.autofix: "false"
       sustainability.name: "Site-Data-API"
       sustainability.role: "Construction telemetry API"
       sustainability.project: "Hilti Connected Jobsite"
@@ -98,7 +97,6 @@ services:
       retries: 3
     labels:
       sustainability.demo: "true"
-      sustainability.autofix: "false"
       sustainability.name: "Model-Cache"
       sustainability.role: "BIM model cache for project drawings"
       sustainability.project: "Hilti Connected Jobsite"

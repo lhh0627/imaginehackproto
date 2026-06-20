@@ -23,9 +23,9 @@ except ImportError:  # pragma: no cover - lets the fallback demo run without Doc
 
 app = Flask(__name__, static_folder="static", static_url_path="")
 
-AUTOFIX_LABEL = "sustainability.autofix"
 IGNORE_LABEL = "sustainability.ignore"
 METRICS_URL_LABEL = "sustainability.metrics_url"
+ALERT_URL_LABEL = "sustainability.alert_url"
 APP_STARTED_AT = time.time()
 ENVIRONMENT_NAME = os.getenv("SENTINEL_ENVIRONMENT", "hilti-jobsite-prod-demo")
 REGION = os.getenv("SENTINEL_REGION", "eu-central-1")
@@ -36,10 +36,10 @@ DAILY_REPORT_UTC = os.getenv("SENTINEL_DAILY_REPORT_UTC", "17:00")
 CLOUD_RULES_PATH = Path(os.getenv("SENTINEL_CLOUD_RULES", "cloud_firewall_rules.json"))
 
 _simulated_fixed = False
+_simulated_alert_message = ""
+_simulated_alerts_received = 0
 _scan_count = 0
-_remediations_count = 0
-_saved_energy_kwh_hour = 0.0
-_saved_carbon_kg_hour = 0.0
+_alerts_count = 0
 _events = deque(
     [
         {
@@ -102,9 +102,12 @@ class Workload:
     model_elements_processed: int
     triangles_processed: int
     render_queue_depth: int
+    alert_active: bool
+    alert_message: str
+    alerts_received: int
     findings: list[str]
     recommendation: str
-    can_autofix: bool
+    can_alert: bool
 
 
 def _now_iso() -> str:
@@ -167,6 +170,18 @@ def _int_metric(metrics: dict[str, Any], key: str, default: int = 0) -> int:
         return int(metrics.get(key, default))
     except (TypeError, ValueError):
         return default
+
+
+def _post_json(url: str, payload: dict[str, Any]) -> dict[str, Any]:
+    request = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=1.2) as response:
+        body = response.read().decode("utf-8")
+        return json.loads(body) if body else {}
 
 
 def _rank_value(risk_level: str) -> int:
@@ -371,9 +386,9 @@ def _issue_from_findings(risk_level: str, findings: list[str]) -> str:
     return "No critical security exposure detected."
 
 
-def _recommendation_from_findings(risk_level: str, can_autofix: bool) -> str:
-    if can_autofix and risk_level in {"critical", "high"}:
-        return "Auto-fix is available for this workload; remove it from the exposed environment."
+def _recommendation_from_findings(risk_level: str, can_alert: bool) -> str:
+    if can_alert and risk_level in {"critical", "high"}:
+        return "Send an alert to the BIM worker/team to pause, secure, or move this workload private."
     if risk_level in {"critical", "high"}:
         return "Restrict public access, remove privileged settings, and review this workload before restart."
     if risk_level == "medium":
@@ -401,8 +416,9 @@ def _workload_from_container(container: Any) -> Workload:
         exposure_paths,
         energy_kwh_hour,
     )
-    can_autofix = labels.get(AUTOFIX_LABEL, "false").lower() == "true"
+    can_alert = bool(labels.get(ALERT_URL_LABEL))
     risk_level = detected_risk
+    active_alert = metrics.get("active_alert") if isinstance(metrics.get("active_alert"), dict) else {}
 
     return Workload(
         id=container.id,
@@ -446,6 +462,9 @@ def _workload_from_container(container: Any) -> Workload:
         model_elements_processed=_int_metric(metrics, "model_elements_processed"),
         triangles_processed=_int_metric(metrics, "triangles_processed"),
         render_queue_depth=_int_metric(metrics, "render_queue_depth"),
+        alert_active=bool(active_alert),
+        alert_message=str(active_alert.get("message", "")),
+        alerts_received=_int_metric(metrics, "alerts_received"),
         findings=[
             *(
                 [
@@ -456,8 +475,8 @@ def _workload_from_container(container: Any) -> Workload:
             ),
             *findings,
         ],
-        recommendation=_recommendation_from_findings(risk_level, can_autofix),
-        can_autofix=can_autofix,
+        recommendation=_recommendation_from_findings(risk_level, can_alert),
+        can_alert=can_alert,
     )
 
 
@@ -510,9 +529,12 @@ def _simulated_workloads() -> list[Workload]:
             model_elements_processed=0,
             triangles_processed=0,
             render_queue_depth=0,
+            alert_active=False,
+            alert_message="",
+            alerts_received=0,
             findings=["No exposed ports or risky container settings detected."],
             recommendation="Keep private networking and normal autoscaling policy.",
-            can_autofix=False,
+            can_alert=False,
         ),
         Workload(
             id="sim-model-cache",
@@ -548,9 +570,12 @@ def _simulated_workloads() -> list[Workload]:
             model_elements_processed=0,
             triangles_processed=0,
             render_queue_depth=0,
+            alert_active=False,
+            alert_message="",
+            alerts_received=0,
             findings=["Image uses the mutable 'latest' tag."],
             recommendation="Apply lifecycle cleanup to old BIM artifacts before the next scan.",
-            can_autofix=False,
+            can_alert=False,
         ),
     ]
 
@@ -593,6 +618,9 @@ def _simulated_workloads() -> list[Workload]:
                 model_elements_processed=8842,
                 triangles_processed=2040000,
                 render_queue_depth=2,
+                alert_active=bool(_simulated_alert_message),
+                alert_message=_simulated_alert_message,
+                alerts_received=_simulated_alerts_received,
                 findings=[
                     "Live workload telemetry received from live-bim-render-worker.",
                     "Cloud firewall rule allows internet ingress: sg-hilti-bim-render-prod: allow tcp/8081 from 0.0.0.0/0",
@@ -600,8 +628,8 @@ def _simulated_workloads() -> list[Workload]:
                     "Public host port detected: 0.0.0.0:8081->80/tcp",
                     "Publicly exposed workload is also high energy consumption.",
                 ],
-                recommendation="Auto-fix by removing this exposed idle render node.",
-                can_autofix=True,
+                recommendation="Send an alert to the BIM worker/team to pause, secure, or move this workload private.",
+                can_alert=True,
             ),
         )
 
@@ -658,18 +686,24 @@ def _operations(workloads: list[Workload]) -> dict[str, Any]:
         1 for workload in workloads if workload.risk_level in {"critical", "high", "medium"}
     )
     compliance_status = "attention required" if risk_counts.get("critical", 0) else "compliant"
+    energy_at_risk = sum(
+        workload.energy_kwh_hour for workload in workloads if workload.risk_level == "critical"
+    )
+    carbon_at_risk = sum(
+        workload.carbon_kg_hour for workload in workloads if workload.risk_level == "critical"
+    )
 
     return {
         "operating_mode": "continuous guardrail",
-        "policy_mode": "monitor, alert, and safe auto-remediate",
+        "policy_mode": "monitor, alert, and guide response",
         "scans_24h": daily_scan_capacity + _scan_count,
-        "remediations_24h": _remediations_count,
+        "alerts_24h": _alerts_count,
         "active_findings": active_findings,
         "compliance_status": compliance_status,
         "coverage": "all visible Docker containers + cloud firewall rules",
         "daily_report_utc": DAILY_REPORT_UTC,
-        "estimated_daily_energy_saved_kwh": round(_saved_energy_kwh_hour * 24, 2),
-        "estimated_daily_carbon_saved_kg": round(_saved_carbon_kg_hour * 24, 2),
+        "estimated_daily_energy_at_risk_kwh": round(energy_at_risk * 24, 2),
+        "estimated_daily_carbon_at_risk_kg": round(carbon_at_risk * 24, 2),
     }
 
 
@@ -721,9 +755,9 @@ def workloads():
     )
 
 
-@app.post("/api/workloads/<workload_id>/autofix")
-def autofix(workload_id: str):
-    global _remediations_count, _saved_carbon_kg_hour, _saved_energy_kwh_hour, _simulated_fixed
+@app.post("/api/workloads/<workload_id>/alert")
+def alert_workload(workload_id: str):
+    global _alerts_count, _simulated_alert_message, _simulated_alerts_received
 
     try:
         client = _docker_client()
@@ -741,48 +775,68 @@ def autofix(workload_id: str):
 
         if target is None:
             raise NotFound(f"No demo workload matched {workload_id}")
-        if target.labels.get(AUTOFIX_LABEL, "false").lower() != "true":
+        alert_url = target.labels.get(ALERT_URL_LABEL)
+        if not alert_url:
             return (
                 jsonify(
                     {
                         "ok": False,
-                        "message": f"{target.name} is protected and cannot be auto-fixed.",
+                        "message": f"{target.name} does not expose an alert channel.",
                     }
                 ),
                 403,
             )
 
-        fixed_workload = _workload_from_container(target)
-        target.remove(force=True)
-        _remediations_count += 1
-        _saved_energy_kwh_hour += fixed_workload.energy_kwh_hour
-        _saved_carbon_kg_hour += fixed_workload.carbon_kg_hour
+        workload = _workload_from_container(target)
+        message = (
+            f"Critical Cloud Sentinel alert: {workload.name} is internet reachable while "
+            f"running '{workload.current_task}'. CPU={workload.cpu_pct:.0f}%, "
+            f"energy={workload.energy_kwh_hour:.2f} kWh/h, "
+            f"carbon={workload.carbon_kg_hour:.2f} kgCO2e/h. "
+            "Pause the render or move it behind private networking."
+        )
+        try:
+            result = _post_json(alert_url, {"severity": workload.risk_level, "message": message})
+        except (OSError, TimeoutError, json.JSONDecodeError):
+            return (
+                jsonify(
+                    {
+                        "ok": False,
+                        "message": f"Could not reach alert endpoint for {target.name}.",
+                    }
+                ),
+                502,
+            )
+        _alerts_count += 1
         _add_event(
-            "remediation",
-            "success",
-            f"Auto-fix removed {target.name}; exposed port and idle energy load eliminated.",
+            "alert",
+            "critical",
+            f"Alert sent to {target.name}: {message}",
         )
         return jsonify(
             {
                 "ok": True,
-                "message": f"Auto-fix complete: removed {target.name} from the monitored environment.",
+                "message": result.get("message", f"Alert sent to {target.name}."),
             }
         )
     except DockerException:
         if workload_id in {"sim-bim-render-04", "BIM-Render-04"}:
-            _simulated_fixed = True
-            _remediations_count += 1
-            _saved_energy_kwh_hour += 9.8
-            _saved_carbon_kg_hour += 4.1
+            _simulated_alert_message = (
+                "Critical Cloud Sentinel alert: BIM-Render-04 is internet reachable while "
+                "running 'Hilti Tower L23 coordination render'. CPU=91%, energy=9.80 kWh/h, "
+                "carbon=4.10 kgCO2e/h. Pause the render or move it behind private networking."
+            )
+            _simulated_alerts_received += 1
+            _alerts_count += 1
             _add_event(
-                "remediation",
-                "success",
-                "Simulation auto-fix removed BIM-Render-04; critical risk cleared.",
+                "alert",
+                "critical",
+                f"Simulation alert sent to BIM-Render-04: {_simulated_alert_message}",
             )
             return jsonify(
                 {
                     "ok": True,
-                    "message": "Simulation auto-fix complete: BIM-Render-04 removed.",
+                    "message": "Simulation alert displayed on BIM worker screen.",
                 }
             )
 
@@ -799,11 +853,11 @@ def autofix(workload_id: str):
 
 @app.post("/api/reset-simulation")
 def reset_simulation():
-    global _remediations_count, _saved_carbon_kg_hour, _saved_energy_kwh_hour, _simulated_fixed
+    global _alerts_count, _simulated_alert_message, _simulated_alerts_received, _simulated_fixed
     _simulated_fixed = False
-    _remediations_count = 0
-    _saved_energy_kwh_hour = 0.0
-    _saved_carbon_kg_hour = 0.0
+    _simulated_alert_message = ""
+    _simulated_alerts_received = 0
+    _alerts_count = 0
     _add_event("simulation", "info", "Simulation reset: BIM-Render-04 restored for another demo.")
     return jsonify({"ok": True, "message": "Simulation reset."})
 

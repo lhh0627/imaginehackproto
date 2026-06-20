@@ -5,6 +5,8 @@ import math
 import os
 import threading
 import time
+from datetime import datetime, timezone
+from html import escape
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 PORT = int(os.getenv("PORT", "80"))
@@ -50,6 +52,8 @@ state = {
     "model_elements_processed": 0,
     "triangles_processed": 0,
     "render_queue_depth": len(RENDER_JOBS),
+    "active_alert": None,
+    "alerts_received": 0,
 }
 state_lock = threading.Lock()
 
@@ -103,6 +107,8 @@ def _metrics() -> dict[str, float | int | bool | str]:
         model_elements_processed = int(state["model_elements_processed"])
         triangles_processed = int(state["triangles_processed"])
         render_queue_depth = int(state["render_queue_depth"])
+        active_alert = dict(state["active_alert"]) if state["active_alert"] else None
+        alerts_received = int(state["alerts_received"])
 
     frame_progress = current_frame / max(1, int(job["frames_total"]))
     geometry_factor = min(1.0, float(job["triangles_total"]) / 5000000)
@@ -130,6 +136,8 @@ def _metrics() -> dict[str, float | int | bool | str]:
         "triangles_processed": triangles_processed,
         "triangles_total": job["triangles_total"],
         "render_queue_depth": render_queue_depth,
+        "active_alert": active_alert,
+        "alerts_received": alerts_received,
         "jobs_completed": jobs_completed,
         "last_job_seconds": last_job_seconds,
         "uptime_seconds": uptime_seconds,
@@ -152,10 +160,20 @@ class Handler(BaseHTTPRequestHandler):
 
     def _send_html(self) -> None:
         metrics = _metrics()
+        alert = metrics["active_alert"]
+        alert_html = ""
+        if alert:
+            alert_html = f"""
+    <section style="border: 2px solid #dc2626; background: #fef2f2; color: #991b1b; padding: 16px; border-radius: 12px; margin-bottom: 24px;">
+      <strong>Cloud Sentinel Alert</strong>
+      <p>{escape(alert["message"])}</p>
+      <small>Severity: {escape(alert["severity"])} | Received: {escape(alert["received_at"])}</small>
+    </section>"""
         body = f"""<!doctype html>
 <html lang="en">
   <head><title>BIM-Render-04</title></head>
   <body style="font-family: system-ui; max-width: 760px; margin: 48px auto;">
+    {alert_html}
     <h1>BIM-Render-04</h1>
     <p>Legacy BIM render worker is currently simulating render jobs.</p>
     <ul>
@@ -166,6 +184,7 @@ class Handler(BaseHTTPRequestHandler):
       <li>Triangles processed: {metrics["triangles_processed"]}/{metrics["triangles_total"]}</li>
       <li>Jobs completed: {metrics["jobs_completed"]}</li>
       <li>Active render jobs: {metrics["active_render_jobs"]}</li>
+      <li>Alerts received: {metrics["alerts_received"]}</li>
       <li>Estimated energy: {metrics["energy_kwh_hour"]} kWh/hour</li>
       <li>Estimated carbon: {metrics["carbon_kg_hour"]} kg CO2e/hour</li>
     </ul>
@@ -186,6 +205,33 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json({"ok": True})
             return
         self._send_html()
+
+    def do_POST(self) -> None:
+        if self.path != "/alert":
+            self.send_response(404)
+            self.end_headers()
+            return
+
+        length = int(self.headers.get("Content-Length", "0"))
+        raw_body = self.rfile.read(length) if length else b"{}"
+        try:
+            payload = json.loads(raw_body.decode("utf-8"))
+        except json.JSONDecodeError:
+            payload = {}
+
+        message = str(payload.get("message", "Cloud Sentinel alert received."))
+        severity = str(payload.get("severity", "critical"))
+        with state_lock:
+            state["alerts_received"] += 1
+            state["active_alert"] = {
+                "message": message,
+                "severity": severity,
+                "received_at": datetime.now(timezone.utc)
+                .isoformat(timespec="seconds")
+                .replace("+00:00", "Z"),
+            }
+
+        self._send_json({"ok": True, "message": "Alert displayed on BIM worker screen."})
 
     def log_message(self, format: str, *args) -> None:
         return
