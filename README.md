@@ -29,8 +29,9 @@ Real scanning:
 - The backend lists Docker containers through the Docker socket.
 - It reads the actual host ports Docker exposes, such as `8081:80`.
 - It reads live workload telemetry from `BIM-Render-04` at `/metrics`, including
-  active render jobs, jobs completed, CPU, memory, energy, carbon, and cost
-  estimates.
+  current BIM render task, model file, frame progress, model elements processed,
+  triangles processed, active render jobs, jobs completed, CPU, memory, energy,
+  carbon, and cost estimates.
 - It loads `cloud_firewall_rules.json`, which represents AWS Security Group /
   Azure NSG / GCP Firewall style rules, and flags rules like
   `allow tcp/8081 from 0.0.0.0/0`.
@@ -141,8 +142,9 @@ Open http://localhost:5000 and use the same dashboard flow.
    scans the Docker environment through the Docker socket. Docker is our
    realistic mini cloud for the hackathon."
 3. "BIM-Render-04 is actively simulating BIM render jobs and publishing live
-   telemetry. The scanner reads its `/metrics` endpoint to get current energy,
-   carbon, cost, CPU, and job count estimates."
+   telemetry. The scanner reads its `/metrics` endpoint to get current render
+   task, model, frame progress, geometry processed, energy, carbon, cost, CPU,
+   and job count estimates."
 4. "It discovers that `BIM-Render-04` has a cloud firewall rule open to the
    internet: `allow tcp/8081 from 0.0.0.0/0`. It then matches that to a public
    endpoint and the Docker host port, giving a full route from internet to

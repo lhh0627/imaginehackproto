@@ -168,6 +168,12 @@ function workloadCard(workload) {
       <div><dt>Workload</dt><dd>${workload.workload_active ? "Active" : "Idle"}</dd></div>
       <div><dt>Jobs</dt><dd>${fmt(workload.jobs_completed ?? 0, 0)}</dd></div>
       <div><dt>Telemetry</dt><dd>${escapeHtml(workload.telemetry_source ?? "cloud-labels")}</dd></div>
+      <div><dt>Task</dt><dd>${escapeHtml(workload.current_task ?? "No active render task")}</dd></div>
+      <div><dt>Model</dt><dd>${escapeHtml(workload.current_model ?? "unknown")}</dd></div>
+      <div><dt>Progress</dt><dd>${fmt(workload.frame_progress_pct ?? 0)}%</dd></div>
+      <div><dt>Elements</dt><dd>${fmt(workload.model_elements_processed ?? 0, 0)}</dd></div>
+      <div><dt>Triangles</dt><dd>${fmt(workload.triangles_processed ?? 0, 0)}</dd></div>
+      <div><dt>Queue</dt><dd>${fmt(workload.render_queue_depth ?? 0, 0)}</dd></div>
     </dl>
     <div class="exposure-block">
       <span>Cloud endpoint</span>

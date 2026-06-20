@@ -96,6 +96,12 @@ class Workload:
     jobs_completed: int
     active_render_jobs: int
     telemetry_source: str
+    current_task: str
+    current_model: str
+    frame_progress_pct: float
+    model_elements_processed: int
+    triangles_processed: int
+    render_queue_depth: int
     findings: list[str]
     recommendation: str
     can_autofix: bool
@@ -434,6 +440,12 @@ def _workload_from_container(container: Any) -> Workload:
         jobs_completed=_int_metric(metrics, "jobs_completed"),
         active_render_jobs=_int_metric(metrics, "active_render_jobs"),
         telemetry_source=str(metrics.get("telemetry_source", "cloud-labels")),
+        current_task=str(metrics.get("current_task", "No active render task")),
+        current_model=str(metrics.get("current_model", "unknown")),
+        frame_progress_pct=_float_metric(metrics, "frame_progress_pct", 0.0),
+        model_elements_processed=_int_metric(metrics, "model_elements_processed"),
+        triangles_processed=_int_metric(metrics, "triangles_processed"),
+        render_queue_depth=_int_metric(metrics, "render_queue_depth"),
         findings=[
             *(
                 [
@@ -492,6 +504,12 @@ def _simulated_workloads() -> list[Workload]:
             jobs_completed=0,
             active_render_jobs=0,
             telemetry_source="cloud-labels",
+            current_task="No active render task",
+            current_model="unknown",
+            frame_progress_pct=0.0,
+            model_elements_processed=0,
+            triangles_processed=0,
+            render_queue_depth=0,
             findings=["No exposed ports or risky container settings detected."],
             recommendation="Keep private networking and normal autoscaling policy.",
             can_autofix=False,
@@ -524,6 +542,12 @@ def _simulated_workloads() -> list[Workload]:
             jobs_completed=0,
             active_render_jobs=0,
             telemetry_source="cloud-labels",
+            current_task="No active render task",
+            current_model="unknown",
+            frame_progress_pct=0.0,
+            model_elements_processed=0,
+            triangles_processed=0,
+            render_queue_depth=0,
             findings=["Image uses the mutable 'latest' tag."],
             recommendation="Apply lifecycle cleanup to old BIM artifacts before the next scan.",
             can_autofix=False,
@@ -563,6 +587,12 @@ def _simulated_workloads() -> list[Workload]:
                 jobs_completed=42,
                 active_render_jobs=1,
                 telemetry_source="live-bim-render-worker",
+                current_task="Hilti Tower L23 coordination render",
+                current_model="Hilti_Tower_Renovation.ifc",
+                frame_progress_pct=48.0,
+                model_elements_processed=8842,
+                triangles_processed=2040000,
+                render_queue_depth=2,
                 findings=[
                     "Live workload telemetry received from live-bim-render-worker.",
                     "Cloud firewall rule allows internet ingress: sg-hilti-bim-render-prod: allow tcp/8081 from 0.0.0.0/0",
@@ -643,6 +673,16 @@ def _operations(workloads: list[Workload]) -> dict[str, Any]:
     }
 
 
+def _critical_summary(workload: Workload) -> str:
+    return (
+        f"Scan {_scan_count}: critical {workload.name} detected in {ENVIRONMENT_NAME}. "
+        f"Task='{workload.current_task}', CPU={workload.cpu_pct:.0f}%, "
+        f"energy={workload.energy_kwh_hour:.2f} kWh/h, "
+        f"carbon={workload.carbon_kg_hour:.2f} kgCO2e/h, "
+        f"internet_reachable={workload.internet_reachable}."
+    )
+
+
 @app.get("/")
 def index():
     return send_from_directory(app.static_folder, "index.html")
@@ -655,12 +695,12 @@ def workloads():
     current, source = _current_workloads()
     _scan_count += 1
 
-    critical_count = _risk_counts(current).get("critical", 0)
-    if critical_count:
+    critical_workloads = [workload for workload in current if workload.risk_level == "critical"]
+    if critical_workloads:
         _add_event(
             "scan",
             "critical",
-            f"Scan {_scan_count}: {critical_count} critical workload detected in {ENVIRONMENT_NAME}.",
+            _critical_summary(critical_workloads[0]),
         )
 
     return jsonify(
