@@ -202,8 +202,12 @@ function workloadCard(workload) {
 }
 
 async function scan() {
-  refreshButton.disabled = true;
-  sourceLabel.textContent = "Scanning cloud environment...";
+  if (refreshButton) {
+    refreshButton.disabled = true;
+  }
+  if (sourceLabel) {
+    sourceLabel.textContent = "Scanning cloud environment...";
+  }
 
   try {
     const response = await fetch("/api/workloads");
@@ -237,10 +241,12 @@ async function scan() {
     reportMetric.textContent = `${data.operations.daily_report_utc} UTC`;
     savedEnergyMetric.textContent = `${fmt(data.operations.estimated_daily_energy_saved_kwh)} kWh`;
     savedCarbonMetric.textContent = `${fmt(data.operations.estimated_daily_carbon_saved_kg)} kg`;
-    sourceLabel.textContent =
-      data.source === "docker"
-        ? `Connected to ${data.deployment.cluster} through Docker socket`
-        : "Running deployed-style simulation because Docker is unavailable here";
+    if (sourceLabel) {
+      sourceLabel.textContent =
+        data.source === "docker"
+          ? `Connected to ${data.deployment.cluster} through Docker socket`
+          : "Running deployed-style simulation because Docker is unavailable here";
+    }
 
     workloadsEl.replaceChildren(...workloads.map(workloadCard));
     renderEvents(data.events ?? []);
@@ -249,10 +255,14 @@ async function scan() {
         `${data.scan.risk_counts.critical ?? 0} critical.`,
     );
   } catch (error) {
-    sourceLabel.textContent = "Monitor is offline";
+    if (sourceLabel) {
+      sourceLabel.textContent = "Monitor is offline";
+    }
     log(error.message);
   } finally {
-    refreshButton.disabled = false;
+    if (refreshButton) {
+      refreshButton.disabled = false;
+    }
   }
 }
 
@@ -281,8 +291,8 @@ async function resetSimulation() {
   await scan();
 }
 
-refreshButton.addEventListener("click", scan);
-resetButton.addEventListener("click", resetSimulation);
+refreshButton?.addEventListener("click", scan);
+resetButton?.addEventListener("click", resetSimulation);
 
 scan();
 setInterval(scan, 8000);
